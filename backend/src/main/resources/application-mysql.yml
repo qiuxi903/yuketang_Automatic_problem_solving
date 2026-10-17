@@ -1,0 +1,12 @@
+# P1 持久化配置（P0 不要求可连通）
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/ykt_platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: root
+    password: change_me
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    database-platform: org.hibernate.dialect.MySQLDialect

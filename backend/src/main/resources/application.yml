@@ -1,0 +1,50 @@
+server:
+  port: 8080
+  error:
+    # 业务异常（ResponseStatusException）的 reason 需随响应体回传前端，否则前端只能提示「Request failed with status code 4xx」
+    include-message: always
+
+spring:
+  application:
+    name: ykt-platform
+  # 本地私有配置（密钥/管理员密码），不进版本库；存在即自动加载并覆盖下面的默认值
+  config:
+    import: "optional:file:./config/local.yml"
+  # P0 使用 H2 本地文件库：数据落在 backend\data\，重启不丢（注册账号、任务与采集的答案均保留）
+  # P1 通过 spring.profiles.active=mysql 切换到 MySQL
+  datasource:
+    url: jdbc:h2:file:./data/ykt;MODE=MySQL;LOCK_TIMEOUT=15000
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  h2:
+    console:
+      # 内网穿透对外开放时必须关闭数据库网页控制台
+      enabled: false
+      path: /h2-console
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: false
+  jackson:
+    default-property-inclusion: always
+
+ykt:
+  jwt:
+    # JWT 密钥：请务必改成自己的随机串（泄露或更换时改这里并重启，所有登录态失效）
+    secret: "${YKT_JWT_SECRET:change-me-to-a-long-random-string}"
+    expire-minutes: 43200  # 30 天：之前 24 小时，隔天打开就提示登录过期
+  answer-lib:
+    # 相对 backend 运行目录指向仓库根下的答案库
+    dir: ../answer-lib
+  admin:
+    # 启动时引导创建的管理员账号：首次部署请改掉默认密码（或用环境变量 YKT_ADMIN_PASSWORD 覆盖）
+    username: admin
+    password: "${YKT_ADMIN_PASSWORD:admin123}"
+
+logging:
+  level:
+    com.ykt.platform: info

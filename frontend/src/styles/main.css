@@ -1,0 +1,483 @@
+/* ==========================================================================
+   雨课堂自动化做题平台 · 设计系统 v2
+   风格：冷调石板底 + 靛蓝主色 + 精致中性灰（清爽工作台；布局不变，仅翻新观感）
+   ========================================================================== */
+
+:root {
+  /* —— 墨色阶（冷灰，更干净） —— */
+  --ink-950: #0b0f14;
+  --ink-900: #111827;
+  --ink-800: #1f2937;
+  --ink-700: #374151;
+  --ink-600: #4b5563;
+  --ink-500: #6b7280;
+  --ink-400: #9ca3af;
+  --ink-300: #c2c8d0;
+  --ink-200: #dde1e7;
+  --ink-100: #eceff3;
+
+  /* —— 面：晴朗通透（亮而柔：白底带一丝冷调，避免纯白的硬 glare） —— */
+  --paper: #f5f8fb;
+  --surface: #ffffff;
+  --surface-2: #f8fafd;
+  --surface-3: #edf2f8;
+  --surface-inset: #f3f6fa;
+
+  /* —— 主色：晴空蓝（亮而柔，明快不刺眼） —— */
+  --accent: #4d84c4;
+  --accent-700: #3a6ca8;
+  --accent-600: #4378b8;
+  --accent-400: #74a3d6;
+  --accent-200: #c3d8ee;
+  --accent-100: #e2edf9;
+  --accent-050: #f0f6fc;
+
+  /* —— 高亮：琥珀 —— */
+  --amber: #c2760e;
+  --amber-100: #fbeed6;
+  --amber-050: #fdf6e9;
+
+  /* —— 语义色（更鲜活但克制） —— */
+  --ok: #12946a;
+  --ok-100: #dcf4ea;
+  --warn: #bf7d0a;
+  --warn-100: #fbeed6;
+  --danger: #d63e3e;
+  --danger-100: #fbe7e7;
+  --info: #3a70c2;
+  --info-100: #e5eef9;
+
+  /* —— 描边 / 圆角 / 阴影 —— */
+  --border: #e4e8ee;
+  --border-strong: #d3d9e2;
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --shadow-xs: 0 1px 2px rgba(17, 24, 39, 0.05);
+  --shadow-sm: 0 2px 8px -2px rgba(17, 24, 39, 0.1);
+  --shadow-md: 0 12px 30px -16px rgba(17, 24, 39, 0.22);
+  --shadow-lg: 0 24px 60px -24px rgba(17, 24, 39, 0.3);
+
+  /* —— 字体（规避 Inter / Roboto / Arial） —— */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Semibold", "PingFang SC",
+    "Microsoft YaHei UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas,
+    "Liberation Mono", monospace;
+
+  /* —— Element Plus 主题映射 —— */
+  --el-color-primary: #4d84c4;
+  --el-color-primary-light-3: #74a3d6;
+  --el-color-primary-light-5: #9cbfdd;
+  --el-color-primary-light-7: #c3d8ee;
+  --el-color-primary-light-8: #d5e5f4;
+  --el-color-primary-light-9: #e8f1f9;
+  --el-color-primary-dark-2: #3a6ca8;
+  --el-color-success: #12946a;
+  --el-color-warning: #bf7d0a;
+  --el-color-danger: #d63e3e;
+  --el-color-error: #d63e3e;
+  --el-color-info: #6b7280;
+  --el-border-radius-base: 8px;
+  --el-border-radius-small: 6px;
+  --el-font-family: var(--font-sans);
+  --el-text-color-primary: var(--ink-900);
+  --el-text-color-regular: var(--ink-700);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border);
+  --el-fill-color-blank: var(--surface);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-800);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent-200);
+  color: var(--ink-900);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  color: var(--ink-900);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+code,
+kbd,
+pre,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* —— 滚动条：隐藏（用户要求不要滑动条；滚动功能保留，触屏/滚轮照常） —— */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* —— 通用工具类 —— */
+.mono-sm {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.02em;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+.scroll-area {
+  overflow-y: auto;
+  min-height: 0;
+  /* 滚到头不向外传播：三栏各自独立滚动，绝不带动其它栏 */
+  overscroll-behavior: contain;
+}
+
+/* 面板通用 */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+/* ==========================================================================
+   Element Plus 覆写：收敛通用感
+   ========================================================================== */
+.el-button {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease,
+    box-shadow 0.16s ease, transform 0.12s ease;
+}
+.el-button:active {
+  transform: translateY(0.5px);
+}
+/* 修正「按钮歪」：Element 给相邻按钮默认加 12px 左边距，
+   通栏堆叠(.full)与网格(.btn-grid)里除第一个外全被推歪——统一归零 */
+.menu .el-button + .el-button,
+.full + .el-button,
+.el-button + .full,
+.btn-grid .el-button + .el-button,
+.el-dialog__footer .el-button + .el-button {
+  margin-left: 0;
+}
+.el-button--primary {
+  --el-button-bg-color: var(--accent);
+  --el-button-border-color: var(--accent);
+  --el-button-hover-bg-color: var(--accent-600);
+  --el-button-hover-border-color: var(--accent-600);
+  --el-button-active-bg-color: var(--accent-700);
+}
+.el-button--default {
+  --el-button-border-color: var(--border-strong);
+  --el-button-hover-bg-color: var(--surface-2);
+  --el-button-hover-border-color: var(--accent-200);
+  --el-button-hover-text-color: var(--accent-600);
+}
+
+.el-input__wrapper,
+.el-textarea__inner,
+.el-select__wrapper {
+  border-radius: var(--r-sm);
+  box-shadow: 0 0 0 1px var(--border) inset;
+  background: var(--surface);
+}
+.el-input__wrapper.is-focus,
+.el-select__wrapper.is-focused {
+  box-shadow: 0 0 0 1.5px var(--accent) inset;
+}
+
+.el-table {
+  --el-table-border-color: var(--border);
+  --el-table-header-bg-color: var(--surface-2);
+  --el-table-header-text-color: var(--ink-500);
+  --el-table-row-hover-bg-color: var(--accent-050);
+  font-size: 13px;
+}
+.el-table th.el-table__cell {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.el-table td.el-table__cell,
+.el-table th.el-table__cell.is-leaf {
+  border-bottom: 1px solid var(--border);
+}
+.el-table::before {
+  display: none;
+}
+
+.el-dialog {
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 0;
+  overflow: hidden;
+}
+.el-dialog__header {
+  padding: 18px 22px;
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+.el-dialog__title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink-900);
+}
+.el-dialog__body {
+  padding: 22px;
+}
+.el-dialog__footer {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.el-tag {
+  border-radius: 99px;
+  font-weight: 600;
+  border: none;
+}
+
+.el-card {
+  border-radius: var(--r-md);
+  border-color: var(--border);
+  box-shadow: var(--shadow-xs) !important;
+}
+
+.el-message-box {
+  border-radius: var(--r-lg);
+  padding: 0;
+}
+.el-message-box__header {
+  padding: 18px 22px 8px;
+}
+.el-message-box__content {
+  padding: 4px 22px 14px;
+}
+.el-message-box__btns {
+  padding: 12px 22px 18px;
+}
+
+.el-progress-bar__outer {
+  background: var(--surface-3);
+  border-radius: 99px;
+}
+.el-progress-bar__inner {
+  border-radius: 99px;
+}
+
+.el-empty__description p {
+  color: var(--ink-400);
+}
+
+.el-collapse,
+.el-collapse-item__header,
+.el-collapse-item__wrap {
+  border-color: var(--border);
+  background: transparent;
+}
+.el-collapse-item__header {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* —— 页签：去掉大灰底卡片感，改下划线式轻盈样式 —— */
+.el-tabs__nav-wrap::after {
+  height: 1px;
+  background: var(--border);
+}
+.el-tabs__item {
+  font-weight: 600;
+  color: var(--ink-500);
+}
+.el-tabs__item.is-active {
+  color: var(--accent);
+}
+.el-tabs__active-bar {
+  height: 2.5px;
+  border-radius: 99px;
+}
+
+/* —— 单选按钮组（模式选择）对齐与配色 —— */
+.el-radio-button__inner {
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   暗色主题：html.dark 时全量替换令牌（Element Plus 的暗色变量已由其官方样式提供）
+   ========================================================================== */
+html.dark {
+  /* —— 墨色阶反转：数值越大越浅 —— */
+  --ink-950: #f2f5fa;
+  --ink-900: #e9edf4;
+  --ink-800: #d8deea;
+  --ink-700: #c0c9d9;
+  --ink-600: #a2adc2;
+  --ink-500: #8590a8;
+  --ink-400: #66718a;
+  --ink-300: #4a546c;
+  --ink-200: #333c52;
+  --ink-100: #242c40;
+
+  /* —— 面：深夜石板 —— */
+  --paper: #0d1118;
+  --surface: #141a24;
+  --surface-2: #1a2130;
+  --surface-3: #232c3e;
+  --surface-inset: #10151f;
+
+  /* —— 主色：暗底的银灰 —— */
+  --accent: #b3bfd1;
+  --accent-700: #ccd6e4;
+  --accent-600: #bdc8d9;
+  --accent-400: #8391a3;
+  --accent-200: #3c4550;
+  --accent-100: #2f3742;
+  --accent-050: #252c36;
+
+  /* —— 高亮：琥珀（暗底提亮） —— */
+  --amber: #e0a445;
+  --amber-100: #3d2f16;
+  --amber-050: #2a2113;
+
+  /* —— 语义色（暗底变体，100 作暗色底 tint） —— */
+  --ok: #3ecf95;
+  --ok-100: #11322a;
+  --warn: #e5a845;
+  --warn-100: #382c12;
+  --danger: #f07b7b;
+  --danger-100: #3d1a1a;
+  --info: #6ea8e8;
+  --info-100: #17273d;
+
+  /* —— 描边 / 阴影 —— */
+  --border: #262f42;
+  --border-strong: #35405a;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 8px -2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 12px 30px -16px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 24px 60px -24px rgba(0, 0, 0, 0.7);
+
+  /* —— Element Plus 暗色映射（覆盖本文件 :root 里的亮色值） —— */
+  --el-color-primary: #b3bfd1;
+  --el-color-primary-light-3: #8391a3;
+  --el-color-primary-light-5: #5c6779;
+  --el-color-primary-light-7: #3c4550;
+  --el-color-primary-light-8: #343c47;
+  --el-color-primary-light-9: #2d343e;
+  --el-color-primary-dark-2: #ccd6e4;
+  --el-color-success: #3ecf95;
+  --el-color-warning: #e5a845;
+  --el-color-danger: #f07b7b;
+  --el-color-error: #f07b7b;
+  --el-bg-color: var(--surface);
+  --el-bg-color-overlay: var(--surface-2);
+  --el-bg-color-page: var(--paper);
+  --el-text-color-primary: var(--ink-900);
+  --el-text-color-regular: var(--ink-700);
+  --el-border-color: var(--border);
+  --el-border-color-light: var(--border);
+  --el-fill-color-blank: var(--surface);
+  --el-fill-color-light: var(--surface-2);
+
+  color-scheme: dark;
+}
+
+
+/* ==========================================================================
+   移动端适配（竖屏 ≤768px）：弹窗/抽屉全宽、表格横滚、底部安全区
+   ========================================================================== */
+@media (max-width: 768px) {
+  .el-dialog {
+    width: 92vw !important;
+    max-width: 440px;
+    margin: 8vh auto !important;
+  }
+  .el-overlay-dialog {
+    align-items: flex-start;
+  }
+  .el-drawer {
+    width: 92vw !important;
+    max-width: 440px;
+  }
+  .el-message-box {
+    width: 88vw !important;
+    max-width: 400px;
+  }
+  .el-table {
+    font-size: 12.5px;
+  }
+  body {
+    font-size: 13.5px;
+    /* 去掉移动端点击元素的灰色高亮闪烁 */
+    -webkit-tap-highlight-color: transparent;
+  }
+  button {
+    /* 消除旧 iOS 的 300ms 点击延迟 */
+    touch-action: manipulation;
+  }
+  /* 关键：iOS 上输入框字号 <16px 会在聚焦时自动放大整个页面——统一 16px 根治 */
+  .el-input__inner,
+  .el-textarea__inner,
+  .el-select__wrapper,
+  .el-input__wrapper input {
+    font-size: 16px !important;
+  }
+  /* 管理后台栅格列在窄屏强制单列 */
+  .admin-body [class*='el-col-'] {
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+  }
+}
+
+/* 移动浏览器动态视口：地址栏收展时高度跟随 */
+@supports (height: 100dvh) {
+  html,
+  body,
+  #app {
+    height: 100dvh;
+  }
+}
