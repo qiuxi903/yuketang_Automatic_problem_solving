@@ -1,5 +1,7 @@
 # 雨课堂自动化做题平台（Yuketang Automatic Problem Solving）
 
+> 📖 **项目详细细则（架构 / 模块 / 流程 / 数据格式 / 配置 / 接口）见 [PROJECT.md](PROJECT.md)**
+
 > [!WARNING]
 > ## ⚠️ 免责声明（必读）
 >
@@ -88,13 +90,7 @@ python -m PyInstaller --noconfirm --onefile --noconsole --name 雨课堂启动�
 
 打开后点「一键启动」：Matcher(8100) / Collector(8200) / Backend(8080) 立即拉起，后端 HTTP 就绪后自动起 Frontend(5173) 与 Agent。每个服务可独立 启动 / 停止 / 重启。
 
-**方式 B：脚本**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
-```
-
-**方式 C：手动逐个启动**
+**方式 B：手动逐个启动**
 
 ```powershell
 cd matcher;   python -m uvicorn app:app --port 8100
@@ -120,6 +116,7 @@ cd agent;     python main.py
 ## 目录结构
 
 ```
+├── PROJECT.md     项目详细细则（架构/模块/流程/数据格式/配置/接口）
 ├── answer-lib/    答案库（按日期批次存放的 md 答案文件 + manifest.json）
 ├── launcher/      单窗口启动器（Python + Tkinter，可打包 exe）
 ├── frontend/      前端 Vue 3 + Vite + Element Plus
@@ -127,8 +124,6 @@ cd agent;     python main.py
 ├── agent/         做题执行器（Python + Playwright 驱动真实浏览器）
 ├── matcher/       题目-答案匹配与校验服务（FastAPI）
 ├── collector/     答案采集服务（FastAPI）
-├── docs/          方案设计 / 接口契约 / 页面选择器校准等文档
-├── start-dev.ps1  P0 本地一键启动脚本
 └── docker-compose.yml  容器编排（MySQL/Redis 为 P1 预留）
 ```
 

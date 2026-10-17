@@ -45,3 +45,8 @@ Thumbs.db
 
 # 本地私有配置（真实 JWT 密钥与管理员密码，绝不提交）
 backend/config/local.yml
+
+# 内部资料（不入库，本地保留）
+start-dev.ps1
+AI协作规则.md
+docs/
