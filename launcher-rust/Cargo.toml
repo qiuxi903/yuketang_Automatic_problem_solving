@@ -1,0 +1,17 @@
+[package]
+name = "ykt-launcher"
+version = "1.0.0"
+edition = "2021"
+description = "雨课堂自动化做题平台 · 启动器（Rust 版）"
+
+# 纯 Rust 依赖，无 tokio / 无浏览器内核：release 单文件 exe 体积小、启动快
+[dependencies]
+eframe = "0.29"
+egui = "0.29"
+
+[profile.release]
+opt-level = "s"      # 体积优先
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
