@@ -902,11 +902,19 @@ class Dispatcher:
     def run_forever(self):
         log.info("调度器启动：%d 个执行工人，轮询 backend %s", len(self.workers), config.BACKEND_BASE)
         self._adopt_orphans()
+        last_warn = 0.0
         while True:
             try:
                 task = self.backend.next_task()
             except Exception as exc:
-                log.warning("调度器领取任务失败：%s", exc)
+                # 连不上后端时限频告警（默认每 30s 一条），并给出可操作提示：
+                # 常见原因是 Agent 带着启动时的旧端口（后端换过端口 / 启动器重启过）
+                now = time.time()
+                if now - last_warn >= 30:
+                    last_warn = now
+                    log.warning(
+                        "连不上后端 %s（%s）。请确认后端已启动；若后端端口变过，"
+                        "在启动器里点 Agent 的「重启」即可对齐地址", config.BACKEND_BASE, exc)
                 task = None
             if task:
                 tid = task.get("taskId")

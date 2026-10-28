@@ -331,6 +331,38 @@ fn spawn_reader<S: std::io::Read + Send + 'static>(
     })
 }
 
+/// 清理孤儿 Agent：命令行含 main.py 的 python 进程，且其父进程已退出
+/// （典型场景：上次启动器被强制关闭，Agent 没被清理，带着过期端口一直刷警告）。
+/// 返回清理数量。
+fn kill_orphan_agents(core: &Arc<Mutex<Core>>, key: usize) -> usize {
+    let script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; \
+        Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | \
+        Where-Object { $_.CommandLine -like '*main.py*' } | \
+        ForEach-Object { \
+            $parentAlive = $null -ne (Get-Process -Id $_.ParentProcessId -ErrorAction SilentlyContinue); \
+            if (-not $parentAlive) { $_.ProcessId } \
+        }";
+    let mut cmd = Command::new("powershell");
+    let Ok(out) = set_no_window(&mut cmd).args(["-NoProfile", "-Command", script]).output() else {
+        return 0;
+    };
+    let text = String::from_utf8_lossy(&out.stdout);
+    let pids: Vec<u32> = text.lines().filter_map(|l| l.trim().parse::<u32>().ok()).collect();
+    let mut killed = 0;
+    for pid in pids {
+        if pid == std::process::id() {
+            continue;
+        }
+        kill_tree(pid);
+        killed += 1;
+    }
+    if killed > 0 {
+        core.lock().unwrap().log(key, Some(Level::Warn),
+            format!("已清理 {killed} 个上次遗留的 Agent 进程（父进程已退出，端口配置可能已过期）"));
+    }
+    killed
+}
+
 /// 查找已在运行的后端（命令行含 ykt-platform 的 java 进程），返回 (pid, 端口)。
 /// 后端独占 H2 数据库文件，启动前必须先确认没有第二个实例，否则新实例会因库锁崩溃。
 fn find_running_backend() -> Option<(u32, Option<u16>)> {
@@ -390,6 +422,8 @@ fn build_plan(
         2 => build_backend(core, key, root),
         3 => build_frontend(core, key, root).map(Some),
         4 => {
+            // 启动前先清掉上次遗留的孤儿 Agent（父进程已退出、端口配置过期）
+            kill_orphan_agents(core, key);
             // agent：注入实际服务地址（端口可能已因保留区间而漂移）
             let (course, m, c, b) = {
                 let cc = core.lock().unwrap();
@@ -478,17 +512,27 @@ fn build_backend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<Opt
     if let Some((pid, port)) = find_running_backend() {
         let mine = core.lock().unwrap().states[key].pid;
         if mine != Some(pid) {
-            let mut c = core.lock().unwrap();
-            if let Some(p) = port {
-                c.states[key].port = Some(p);
-                c.reserved.insert(p);
+            let agent_running;
+            {
+                let mut c = core.lock().unwrap();
+                if let Some(p) = port {
+                    c.states[key].port = Some(p);
+                    c.reserved.insert(p);
+                }
+                c.states[key].pid = Some(pid);
+                c.states[key].running = true;
+                c.states[key].status = "已在运行".to_string();
+                c.log(key, Some(Level::Info), format!(
+                    "检测到后端已在运行（PID {pid}{}），直接接管，不再启动第二个（H2 数据库同一时刻只允许一个后端）",
+                    port.map(|p| format!("，端口 {p}")).unwrap_or_default()));
+                agent_running = c.states[4].running;
             }
-            c.states[key].pid = Some(pid);
-            c.states[key].running = true;
-            c.states[key].status = "已在运行".to_string();
-            c.log(key, Some(Level::Info), format!(
-                "检测到后端已在运行（PID {pid}{}），直接接管，不再启动第二个（H2 数据库同一时刻只允许一个后端）",
-                port.map(|p| format!("，端口 {p}")).unwrap_or_default()));
+            // Agent 的环境变量里带着启动时的后端地址：后端端口确定后若不一致，重启 Agent 对齐
+            if agent_running {
+                core.lock().unwrap().log(4, Some(Level::Warn),
+                    "后端端口已确定，重启 Agent 以对齐服务地址");
+                restart_one(core, 4);
+            }
             return Ok(None);
         }
     }
@@ -560,6 +604,8 @@ fn build_frontend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<Sp
 
 /// 一键启动：matcher/collector/backend 立即起；后端 HTTP 就绪后再起 frontend + agent。
 pub fn start_all(core: &Arc<Mutex<Core>>) {
+    // 一键启动前先清孤儿 Agent，避免旧进程带着过期端口一直刷连接失败警告
+    kill_orphan_agents(core, 4);
     for key in [0usize, 1, 2] {
         start_service(core, key);
     }
@@ -567,8 +613,12 @@ pub fn start_all(core: &Arc<Mutex<Core>>) {
     thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(120);
         loop {
-            let backend_port = core2.lock().unwrap().states[2].port.unwrap_or(28080);
-            if backend_ready(backend_port) {
+            // 等后端启动流程（端口解析/接管）结束再读端口，避免把中间态端口写进 Agent 环境
+            let (backend_port, backend_starting) = {
+                let c = core2.lock().unwrap();
+                (c.states[2].port.unwrap_or(28080), c.starting[2])
+            };
+            if !backend_starting && backend_ready(backend_port) {
                 break;
             }
             if Instant::now() >= deadline {
