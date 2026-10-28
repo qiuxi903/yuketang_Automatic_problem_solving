@@ -73,13 +73,14 @@ def build_idx(req: IdxRequest):
 
     idx 每一项：int（单选，负数=未匹配/无选项）或 list[int]（多选，全部命中才给列表）。
     noOptions 单列无选项题（填空/简答等新题型），agent 会如实播报并跳过。
+    新卷子（本卷无答案文件）或本卷未命中的题：再尝试「跨卷同题匹配」——
+    库内其它试卷出现过同一道题就直接借用其答案（很多课程题目跨卷复用）。
     """
-    answers = core.load_paper(req.batch, req.paper)
-    if answers is None:
-        return {"error": "NO_ANSWER_FILE"}
+    answers = core.load_paper(req.batch, req.paper)  # None = 新卷子
+    per_paper = answers or []
     idx, low, noopts = [], [], []
     for i, q in enumerate(req.questions):
-        expected = answers[i][1] if i < len(answers) else None
+        expected = per_paper[i][1] if i < len(per_paper) else None
         opts = q.get("options") or []
         if not opts:
             idx.append(-1)
@@ -94,8 +95,30 @@ def build_idx(req: IdxRequest):
             idx.append(-1)
         if not hits or (isinstance(idx[-1], int) and idx[-1] < 0) or s < 0.80:
             low.append({"q": i + 1, "score": round(s, 3), "expected": expected})
-    return {"batch": req.batch, "paper": req.paper,
-            "idx": idx, "lowConfidence": low, "noOptions": noopts}
+
+    # 跨卷补全：本卷没答案或没命中的题，去库内其它试卷找同题
+    cross = []
+    for i, q in enumerate(req.questions):
+        opts = q.get("options") or []
+        if not opts:
+            continue
+        cur = idx[i]
+        if isinstance(cur, int) and cur >= 0:
+            continue  # 本卷已命中
+        ans, score, src = core.find_cross_answer(q.get("stem", ""), exclude_paper=req.paper)
+        if not ans:
+            continue
+        j, ms = core.match_index(opts, ans)
+        if j >= 0 and ms >= 0.80:
+            idx[i] = j
+            cross.append({"q": i + 1, "paper": src, "score": round(score, 3)})
+    if cross:
+        done = {c["q"] for c in cross}
+        low = [x for x in low if x["q"] not in done]
+
+    return {"batch": req.batch, "paper": req.paper, "idx": idx,
+            "lowConfidence": low, "noOptions": noopts,
+            "paperInLib": answers is not None, "crossMatched": cross}
 
 
 @app.post("/verify")

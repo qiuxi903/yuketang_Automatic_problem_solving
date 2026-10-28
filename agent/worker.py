@@ -638,14 +638,23 @@ class Worker:
             self._stage(task_id, f"{name}：匹配答案库")
             built = self.matcher.build_idx(batch, name, questions)
             idx = built.get("idx", [])
+            cross = built.get("crossMatched") or []
+            if cross:
+                log.info("[%s] %s 跨卷同题命中 %d/%d 题（借用库内其它试卷的同题答案）",
+                         self.name, name, len(cross), len(questions))
             if not idx and questions:
-                # 新卷子：答案库暂无此卷（build_idx 返回 NO_ANSWER_FILE）→ 全部题目交给兜底 API，
-                # 否则只能交白卷拿 0 分（交卷后答案仍会采集入库，供后续复用）
+                # 兜底：matcher 返回异常（无 idx 字段）时，按「全部未匹配」处理，
+                # 让兜底补答与交卷后采集照常进行
                 idx = [-1] * len(questions)
-                log.info("[%s] %s 答案库暂无此卷，%d 题全部走兜底 API", self.name, name, len(questions))
-                self.backend.post_progress(
-                    task_id, name, exam_id,
-                    message=f"新卷子：答案库暂无该卷，{len(questions)} 题将用兜底 API 作答，交卷后答案自动入库")
+            if not built.get("paperInLib", True) and questions:
+                # 新卷子（答案库没有该卷）：先跨卷同题匹配，剩余的交卷后采集入库
+                if cross:
+                    msg = (f"新卷子：答案库其它试卷命中 {len(cross)}/{len(questions)} 题（同类题目复用），"
+                           "其余交卷后采集入库")
+                else:
+                    msg = (f"新卷子：答案库暂无该卷，{len(questions)} 题将尝试兜底 API"
+                           "（未配置则交卷后采集答案入库）")
+                self.backend.post_progress(task_id, name, exam_id, message=msg)
             if built.get("lowConfidence"):
                 log.warning("[%s] %s 低置信题 %d 道", self.name, name, len(built["lowConfidence"]))
             # 新题型（填空/简答等无选项题）：如实告知用户，自动跳过不点选

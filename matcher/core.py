@@ -158,6 +158,88 @@ def load_manifest():
     return json.load(open(path, encoding="utf-8"))
 
 
+# —— 跨卷同题匹配：很多课程题目跨卷复用，新卷子可先用旧卷的同题答案作答 ——
+
+_ALL_CACHE = {"mtime": None, "rows": []}
+
+
+def _lib_mtime():
+    """答案库整体修改时间（manifest + 各批次目录与 md 文件），用于缓存失效。"""
+    m = 0.0
+    try:
+        m = os.path.getmtime(os.path.join(ANSWER_LIB_DIR, "manifest.json"))
+    except Exception:
+        pass
+    try:
+        for d in os.listdir(ANSWER_LIB_DIR):
+            p = os.path.join(ANSWER_LIB_DIR, d)
+            if not os.path.isdir(p):
+                continue
+            try:
+                m = max(m, os.path.getmtime(p))
+            except Exception:
+                pass
+            for f in os.listdir(p):
+                if f.endswith(".md"):
+                    try:
+                        m = max(m, os.path.getmtime(os.path.join(p, f)))
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+    return m
+
+
+def load_all_answers():
+    """全库题目索引：[(归一化题干, 原题干, 答案, 试卷名)]，按库修改时间缓存。"""
+    mt = _lib_mtime()
+    if _ALL_CACHE["mtime"] == mt and _ALL_CACHE["rows"]:
+        return _ALL_CACHE["rows"]
+    rows = []
+    for b in load_manifest().get("batches", []):
+        batch = b.get("batch")
+        for p in b.get("papers", []):
+            name = p.get("name")
+            if not name:
+                continue
+            for stem, ans in (load_paper(batch, name) or []):
+                if stem and ans:
+                    rows.append((norm(stem), stem, ans, name))
+    _ALL_CACHE["mtime"] = mt
+    _ALL_CACHE["rows"] = rows
+    return rows
+
+
+def find_cross_answer(stem, exclude_paper=None, min_score=0.92):
+    """在库内其它试卷里找同一道题，返回 (答案, 置信度, 来源试卷)。
+
+    先按归一化题干精确命中（同题复用最可靠），再对长度接近的候选做相似度比较；
+    低于 min_score 不采用，避免把「相似但不是同一题」的答案张冠李戴。
+    """
+    target = norm(stem or "")
+    if len(target) < 6:  # 太短的题干（如「判断题」）容易误配，不参与跨卷匹配
+        return None, 0.0, None
+    rows = load_all_answers()
+    for ns, _stem, ans, paper in rows:
+        if paper == exclude_paper:
+            continue
+        if ns == target:
+            return ans, 1.0, paper
+    best_ans, best_score, best_paper = None, 0.0, None
+    tl = len(target)
+    for ns, _stem, ans, paper in rows:
+        if paper == exclude_paper:
+            continue
+        if abs(len(ns) - tl) > max(6, int(tl * 0.35)):
+            continue
+        s = sim(ns, target)
+        if s > best_score:
+            best_ans, best_score, best_paper = ans, s, paper
+    if best_score >= min_score:
+        return best_ans, best_score, best_paper
+    return None, best_score, None
+
+
 def verify(batch: str, name: str, selected):
     """比对作答与答案库，返回差异明细。"""
     answers = load_paper(batch, name)
