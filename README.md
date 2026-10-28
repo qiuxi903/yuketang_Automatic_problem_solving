@@ -22,7 +22,7 @@
 - **答案采集入库**：已交卷的试卷自动从结果页采集答案；答案按「采集日期」分批次存放，自动路由（已入库卷子原批次更新，新卷子进当天批次）
 - **智能分流**：已交卷且库中有答案的卷子直接复用；0 分空白卷自动「再次答题」重做以引出答案；同账号任务自动排队
 - **可视化工作台**：试卷清单（按雨课堂日期分组）、答题卡式进度、实时事件流、成绩汇总、答案导出
-- **单窗口启动器**：Rust（egui）深色主题 GUI，单文件 exe 免 Python 环境；5 个服务独立 启动 / 停止 / 重启，日志按级别 / 时间戳分色；旧 Tkinter 版保留于 launcher/
+- **单窗口启动器**：Rust（egui）亮色 GUI，单文件 exe 免 Python 环境；5 个服务独立 启动 / 停止 / 重启，日志按级别 / 时间戳分色
 
 ## 技术栈
 
@@ -33,7 +33,7 @@
 | Agent | Python 3.10+ + Playwright（驱动系统 Chrome/Edge） |
 | 匹配服务 | Python + FastAPI（题目-答案模糊匹配与校验） |
 | 采集服务 | Python + FastAPI（结果页答案解析入库） |
-| 启动器 | Rust + egui（单文件 exe）；旧版 Python + Tkinter 保留 |
+| 启动器 | Rust + egui（单文件 exe，免 Python 环境） |
 
 ## 环境要求
 
@@ -91,15 +91,6 @@ cargo build --release
 
 打开后点「一键启动」：Matcher(28100) / Collector(28200) / Backend(28080) 立即拉起，后端 HTTP 就绪后自动起 Frontend(25173) 与 Agent。（端口刻意选了不常用段，避免与 8080/5173 等热门端口上的其它程序互相误伤；被 Hyper-V 保留区间吞掉时启动器会自动向后换口并联动各处地址。）每个服务可独立 启动 / 停止 / 重启。
 
-旧 Python 版（需要 Python 3.10+）：
-
-```powershell
-cd launcher
-python launcher_app.py
-# 或用 PyInstaller 打成单文件 exe：
-python -m PyInstaller --noconfirm --onefile --noconsole --name 雨课堂启动器 launcher_app.py
-```
-
 **方式 B：手动逐个启动**
 
 ```powershell
@@ -129,7 +120,6 @@ cd agent;     python main.py
 ├── PROJECT.md     项目详细细则（架构/模块/流程/数据格式/配置/接口）
 ├── answer-lib/    答案库（按日期批次存放的 md 答案文件 + manifest.json）
 ├── launcher-rust/ 单窗口启动器（Rust + egui，cargo build 出单文件 exe）
-├── launcher/      旧版启动器（Python + Tkinter，保留可用）
 ├── frontend/      前端 Vue 3 + Vite + Element Plus
 ├── backend/       后端 Spring Boot 3.2（JPA + JWT + WebSocket，H2 文件库）
 ├── agent/         做题执行器（Python + Playwright 驱动真实浏览器）

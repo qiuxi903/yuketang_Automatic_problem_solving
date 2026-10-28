@@ -6,11 +6,6 @@ build/
 target/
 *.class
 
-# 启动器构建产物（PyInstaller）
-launcher/build/
-launcher/dist/
-launcher/*.spec
-
 # 日志与运行期数据
 logs/
 *.log

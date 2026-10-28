@@ -1,6 +1,6 @@
 # 雨课堂启动器（Rust 版）
 
-单窗口亮色启动器（Windows 11 Fluent 风格：白卡片大圆角、柔和描边与投影、强调蓝 #0067c0、Segoe UI / Cascadia 字体），用 Rust + [egui](https://github.com/emilk/egui) 重写（替代旧版 Python + Tkinter，见 `../launcher/`）：
+单窗口亮色启动器（Windows 11 Fluent 风格：白卡片大圆角、柔和描边与投影、强调蓝 #0067c0、Segoe UI / Cascadia 字体），用 Rust + [egui](https://github.com/emilk/egui) 重写（替代此前的 Python + Tkinter 版）：
 **单文件 exe、约 3.4 MB、无需安装 Python 环境即可使用。**
 
 ## 功能（与 Python 版对齐）

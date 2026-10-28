@@ -110,7 +110,7 @@
 
 ### 2.6 Launcher（`launcher-rust/`，主推）
 
-Rust（egui）单窗口亮色启动器（Windows 11 Fluent 风格：白卡片大圆角、柔和投影、强调蓝、Segoe UI 字体）：单文件 exe 约 3.4 MB，运行期零依赖（无需 Python 环境）。布局重构为「左侧服务列表 + 右侧日志」双栏（非旧版三段式）——每个服务行内嵌 启动/停止/重启 按钮、状态点 + 端口/PID，点击行切换日志视图；「全部」聚合视图汇总各服务日志，按级别/时间戳分色、限行 1500、智能滚动（向上翻历史即暂停跟随）；一键启动顺序为 matcher/collector/backend → 等 28080 HTTP 就绪 → frontend + agent；启动前自动清理端口上的本平台残留进程；所有服务端口被 Hyper-V 保留区间（10013）或其它程序占用时自动向后扫描并联动修正 agent 服务地址与 vite 代理（YKT_BACKEND_PORT）；jar/node_modules 缺失自动构建；`PYTHONIOENCODING=utf-8` 注入子进程保证中文日志不乱码；关闭窗口即停全部服务（有服务在跑先确认）。构建：`cargo build --release` → `target/release/ykt-launcher.exe`。旧 Tkinter 版保留在 `launcher/`（PyInstaller 可打包），行为一致可互换。
+Rust（egui）单窗口亮色启动器（Windows 11 Fluent 风格：白卡片大圆角、柔和投影、强调蓝、Segoe UI 字体）：单文件 exe 约 3.4 MB，运行期零依赖（无需 Python 环境）。布局重构为「左侧服务列表 + 右侧日志」双栏（非旧版三段式）——每个服务行内嵌 启动/停止/重启 按钮、状态点 + 端口/PID，点击行切换日志视图；「全部」聚合视图汇总各服务日志，按级别/时间戳分色、限行 1500、智能滚动（向上翻历史即暂停跟随）；一键启动顺序为 matcher/collector/backend → 等 28080 HTTP 就绪 → frontend + agent；启动前自动清理端口上的本平台残留进程；所有服务端口被 Hyper-V 保留区间（10013）或其它程序占用时自动向后扫描并联动修正 agent 服务地址与 vite 代理（YKT_BACKEND_PORT）；jar/node_modules 缺失自动构建；`PYTHONIOENCODING=utf-8` 注入子进程保证中文日志不乱码；关闭窗口即停全部服务（有服务在跑先确认）。构建：`cargo build --release` → `target/release/ykt-launcher.exe`。
 
 ## 3. 答案库格式（`answer-lib/`）
 
