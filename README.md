@@ -16,13 +16,13 @@
 
 ## 功能特性
 
-- **多用户平台**：平台账号注册（邀请码制、密码强度校验）、JWT 登录、管理员后台（用户 / 邀请码 / 任务 / 答案库 / 设置）
+- **多用户平台**：平台账号注册（邀请码制、一码可邀多人、邀请链接直达自动填码、密码强度校验）、JWT 登录、管理员后台（用户 / 邀请码 / 任务 / 答案库 / 设置）
 - **扫码登录雨课堂**：Agent 自动打开雨课堂登录页，二维码过期自动刷新，支持会话复用（不用每次扫码）
 - **自动做题**：答案库命中的题目自动作答，未命中回退兜底 API，逐题实时回报进度，交卷后自动读取成绩
 - **答案采集入库**：已交卷的试卷自动从结果页采集答案；答案按「采集日期」分批次存放，自动路由（已入库卷子原批次更新，新卷子进当天批次）
 - **智能分流**：已交卷且库中有答案的卷子直接复用；0 分空白卷自动「再次答题」重做以引出答案；同账号任务自动排队
 - **可视化工作台**：试卷清单（按雨课堂日期分组）、答题卡式进度、实时事件流、成绩汇总、答案导出
-- **单窗口启动器**：Tkinter 深色主题 GUI，5 个服务独立 启动 / 停止 / 重启，日志按级别 / 时间戳分色，PyInstaller 可打包为单文件 exe
+- **单窗口启动器**：Rust（egui）深色主题 GUI，单文件 exe 免 Python 环境；5 个服务独立 启动 / 停止 / 重启，日志按级别 / 时间戳分色；旧 Tkinter 版保留于 launcher/
 
 ## 技术栈
 
@@ -33,7 +33,7 @@
 | Agent | Python 3.10+ + Playwright（驱动系统 Chrome/Edge） |
 | 匹配服务 | Python + FastAPI（题目-答案模糊匹配与校验） |
 | 采集服务 | Python + FastAPI（结果页答案解析入库） |
-| 启动器 | Python + Tkinter，PyInstaller 打包 |
+| 启动器 | Rust + egui（单文件 exe）；旧版 Python + Tkinter 保留 |
 
 ## 环境要求
 
@@ -81,6 +81,18 @@ ykt:
 
 **方式 A：启动器（推荐）**
 
+Rust 版（单文件 exe，免 Python 依赖）：
+
+```powershell
+cd launcher-rust
+cargo build --release
+# 产物：target\release\ykt-launcher.exe，双击即用
+```
+
+打开后点「一键启动」：Matcher(28100) / Collector(28200) / Backend(28080) 立即拉起，后端 HTTP 就绪后自动起 Frontend(25173) 与 Agent。（端口刻意选了不常用段，避免与 8080/5173 等热门端口上的其它程序互相误伤；被 Hyper-V 保留区间吞掉时启动器会自动向后换口并联动各处地址。）每个服务可独立 启动 / 停止 / 重启。
+
+旧 Python 版（需要 Python 3.10+）：
+
 ```powershell
 cd launcher
 python launcher_app.py
@@ -88,19 +100,17 @@ python launcher_app.py
 python -m PyInstaller --noconfirm --onefile --noconsole --name 雨课堂启动器 launcher_app.py
 ```
 
-打开后点「一键启动」：Matcher(8100) / Collector(8200) / Backend(8080) 立即拉起，后端 HTTP 就绪后自动起 Frontend(5173) 与 Agent。每个服务可独立 启动 / 停止 / 重启。
-
 **方式 B：手动逐个启动**
 
 ```powershell
-cd matcher;   python -m uvicorn app:app --port 8100
-cd collector; python -m uvicorn app:app --port 8200
+cd matcher;   python -m uvicorn app:app --port 28100
+cd collector; python -m uvicorn app:app --port 28200
 cd backend;   mvn -DskipTests package; java -jar target\ykt-platform-0.0.1-SNAPSHOT.jar
 cd frontend;  npm run dev
 cd agent;     python main.py
 ```
 
-启动后访问 <http://localhost:5173>，用管理员账号登录（后台生成邀请码 → 新用户凭邀请码注册）。
+启动后访问 <http://localhost:25173>，用管理员账号登录（后台生成邀请码 → 新用户凭邀请码注册）。
 
 ### 4. 使用流程
 
@@ -111,14 +121,15 @@ cd agent;     python main.py
 
 ### 5. 内网穿透（可选）
 
-只穿透前端 5173 即可（前端自带 `/api` 代理到后端，后端 8080 不要直接暴露）。HTTP 类穿透（ngrok / cloudflared 等）或 TCP 类（frp）均可；穿透域名会变，后端 CORS 已放行任意来源。
+只穿透前端 25173 即可（前端自带 `/api` 代理到后端，后端 28080 不要直接暴露）。HTTP 类穿透（ngrok / cloudflared 等）或 TCP 类（frp）均可；穿透域名会变，后端 CORS 已放行任意来源。
 
 ## 目录结构
 
 ```
 ├── PROJECT.md     项目详细细则（架构/模块/流程/数据格式/配置/接口）
 ├── answer-lib/    答案库（按日期批次存放的 md 答案文件 + manifest.json）
-├── launcher/      单窗口启动器（Python + Tkinter，可打包 exe）
+├── launcher-rust/ 单窗口启动器（Rust + egui，cargo build 出单文件 exe）
+├── launcher/      旧版启动器（Python + Tkinter，保留可用）
 ├── frontend/      前端 Vue 3 + Vite + Element Plus
 ├── backend/       后端 Spring Boot 3.2（JPA + JWT + WebSocket，H2 文件库）
 ├── agent/         做题执行器（Python + Playwright 驱动真实浏览器）

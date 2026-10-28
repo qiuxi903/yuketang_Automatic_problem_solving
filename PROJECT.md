@@ -9,15 +9,15 @@
 
 ```
                        ┌─────────────────────────────┐
-  浏览器 ──5173──▶      │ Frontend (Vue 3 + Vite)      │
-                       │  /api 代理 ──8080──┐          │
+  浏览器 ──25173──▶      │ Frontend (Vue 3 + Vite)      │
+                       │  /api 代理 ──28080──┐          │
                        └───────────────────┼──────────┘
                                            ▼
                        ┌─────────────────────────────┐
                        │ Backend (Spring Boot 3.2)    │  H2 文件库 backend/data/
                        │  REST + JWT + WebSocket      │
                        └───────┬───────────┬─────────┘
-                    8100 ▼           8200 ▼
+                    28100 ▼         28200 ▼
               ┌──────────────┐   ┌──────────────┐
               │ Matcher       │   │ Collector     │
               │ 题目-答案匹配  │   │ 答案解析入库   │──▶ answer-lib/（md 按日期批次）
@@ -32,17 +32,17 @@
 
 | 服务 | 端口 | 技术 | 职责 |
 |---|---|---|---|
-| Frontend | 5173 | Vue 3 + TS + Element Plus + Pinia | 工作台 UI、管理后台 |
-| Backend | 8080 | Spring Boot 3.2 + JPA + H2 | 账号/邀请码/任务/会话/答案库/推送 |
-| Matcher | 8100 | FastAPI | 题目文本与答案库的模糊匹配、置信度校验 |
-| Collector | 8200 | FastAPI | 结果页答案解析、按批次落盘 answer-lib |
+| Frontend | 25173 | Vue 3 + TS + Element Plus + Pinia | 工作台 UI、管理后台 |
+| Backend | 28080 | Spring Boot 3.2 + JPA + H2 | 账号/邀请码/任务/会话/答案库/推送 |
+| Matcher | 28100 | FastAPI | 题目文本与答案库的模糊匹配、置信度校验 |
+| Collector | 28200 | FastAPI | 结果页答案解析、按批次落盘 answer-lib |
 | Agent | — | Python + Playwright | 驱动真实浏览器完成 扫码/抓题/作答/交卷/采集 |
 
 ## 2. 模块细则
 
 ### 2.1 Backend（`backend/`）
 
-**实体**：`User`（角色 USER/ADMIN，BCrypt 密码）、`InviteCode`（一码一用，可禁用/删除/批量清理）、`YktSession`（雨课堂扫码会话，状态机 `WAITING_SCAN → SCANNED → CLOSED`，二维码过期 `EXPIRED` 可刷新）、`Task`（任务）、`TaskItem`（任务明细）、`Paper` / `Question`（题目 DOM 快照）、`Contribution`（答案贡献记录）、`AnswerApiConfig`（兜底 API 配置）。
+**实体**：`User`（角色 USER/ADMIN，BCrypt 密码）、`InviteCode`（生成时可设每个码允许的注册人数：一码一用 / 一码多人 / 不限，另有 `InviteUse` 使用记录，可禁用/启用/删除/批量清理已用完）、`YktSession`（雨课堂扫码会话，状态机 `WAITING_SCAN → SCANNED → CLOSED`，二维码过期 `EXPIRED` 可刷新）、`Task`（任务）、`TaskItem`（任务明细）、`Paper` / `Question`（题目 DOM 快照）、`Contribution`（答案贡献记录）、`AnswerApiConfig`（兜底 API 配置）。
 
 **状态机**：
 
@@ -53,13 +53,13 @@
 
 | 分区 | 说明 |
 |---|---|
-| `/api/auth` | 注册（邀请码+强度校验）/ 登录（JWT） |
+| `/api/auth` | 注册（邀请码+强度校验）/ 登录（JWT）/ 邀请码公开查询 `invite-info` |
 | `/api/sessions` | 创建扫码会话、二维码刷新、状态查询 |
 | `/api/tasks` | 创建任务、批次确认（`/{id}/batch`，支持勾选清单与重做清单）、进度、导出、暂停/恢复/中断 |
 | `/api/agent/**` | Agent 专用：领任务、回传 二维码/帧/题目/进度/答案/结果 |
 | `/api/papers` `/api/answer` | 试卷清单（带雨课堂日期分组）、答案查询、兜底 API |
 | `/api/community` | 答案社区贡献流 |
-| `/api/admin/**` | 用户/角色、邀请码（生成/禁用/删除/清理已用）、任务、答案库、总览、兜底 API 设置 |
+| `/api/admin/**` | 用户/角色、邀请码（生成/启停/删除/清理已用完）、任务、答案库、总览、兜底 API 设置 |
 
 **推送**：WebSocket `/ws/tasks/{taskId}`，逐题进度、答题卡、实时帧（base64 截图缩略）都走这条通道。
 
@@ -73,6 +73,8 @@
 
 1. 同一雨课堂账号同时只能有一个任务——占用注册表（内存态 + 过期自救），同账号任务自动排队；
 2. 扫码后绝不自动开始做题，必须等用户在试卷清单勾选并点「做题 / 取答案」（`WAITING_BATCH` 确认通道，确认后回读任务快照把勾选清单贯通）。
+
+**题型兼容**：抓题按页面题块顺序全量抓取（与答案库题号严格对齐），单选（radio）逐题点选，多选（checkbox）按答案「A；B」拆分多点；填空/简答等无选项题自动跳过并如实播报，绝不错位作答。
 
 **单卷执行流**（`_answer_one`）：
 
@@ -99,14 +101,14 @@
 
 ### 2.5 Frontend（`frontend/`）
 
-- `Login.vue`：登录/注册切换，注册带邀请码 + 用户名/密码强度校验
+- `Login.vue`：登录/注册切换，注册带邀请码 + 用户名/密码强度校验；支持邀请链接 `?invite=码` 直达——自动切到注册并填码，且实时校验剩余名额
 - `Console.vue` 工作台三栏：左 试卷清单（按雨课堂日期分组、组头全选、新卷子组置底）/ 中 操作与实时进度（答题卡、题号进度、事件流、实时帧）/ 右 成绩与导出
 - 任务结束自动识别「COLLECTED（取到答案但没做）」的卷子并弹窗询问是否一键重做（消耗一次作答次数）
-- 管理后台：总览、用户角色、邀请码（统计 + 筛选 + 删除 + 一键清理已使用）、任务、答案库、兜底 API 设置
+- 管理后台：总览、用户角色、邀请码（生成时设每码可用人数、复制码/邀请链接、用量进度、使用者记录、启停、筛选、一键清理已用完）、任务、答案库、兜底 API 设置
 
-### 2.6 Launcher（`launcher/`）
+### 2.6 Launcher（`launcher-rust/`，主推）
 
-Tkinter 单窗口深色启动器：5 个服务卡片独立 启动/停止/重启，状态点 + 端口/PID；日志分页签（「全部」汇总 + 各服务），按级别/时间戳分色、限行 1500、智能滚动；一键启动顺序为 matcher/collector/backend → 等 8080 HTTP 就绪 → frontend + agent；启动前自动清理端口上的本平台残留进程；5173 被系统保留时自动向后换端口（5173-5192）。`PYTHONIOENCODING=utf-8` 注入子进程保证中文日志不乱码。可用 PyInstaller 打包单文件 exe。
+Rust（egui）单窗口亮色启动器（Windows 11 Fluent 风格：白卡片大圆角、柔和投影、强调蓝、Segoe UI 字体）：单文件 exe 约 3.4 MB，运行期零依赖（无需 Python 环境）。布局重构为「左侧服务列表 + 右侧日志」双栏（非旧版三段式）——每个服务行内嵌 启动/停止/重启 按钮、状态点 + 端口/PID，点击行切换日志视图；「全部」聚合视图汇总各服务日志，按级别/时间戳分色、限行 1500、智能滚动（向上翻历史即暂停跟随）；一键启动顺序为 matcher/collector/backend → 等 28080 HTTP 就绪 → frontend + agent；启动前自动清理端口上的本平台残留进程；所有服务端口被 Hyper-V 保留区间（10013）或其它程序占用时自动向后扫描并联动修正 agent 服务地址与 vite 代理（YKT_BACKEND_PORT）；jar/node_modules 缺失自动构建；`PYTHONIOENCODING=utf-8` 注入子进程保证中文日志不乱码；关闭窗口即停全部服务（有服务在跑先确认）。构建：`cargo build --release` → `target/release/ykt-launcher.exe`。旧 Tkinter 版保留在 `launcher/`（PyInstaller 可打包），行为一致可互换。
 
 ## 3. 答案库格式（`answer-lib/`）
 
@@ -173,8 +175,8 @@ Collector 同时维护 `manifest.json`；Backend 启动时把整个答案库导�
 
 - 后端 jar 运行时锁定文件：Windows 下重新 `mvn package` 前先停后端
 - H2 数据库在 `backend/data/`，结构变更用 H2 Shell 前必须停后端（锁库），操作前备份到 `backup/`
-- 前端 `/api` 由 Vite 代理到 8080；内网穿透只暴露 5173，**不要**直接暴露 8080
-- 邀请码在管理后台生成；注册用户名不可纯数字、密码需 8 位以上且含字母和数字
+- 服务端口用不常用段（前端 25173 / 后端 28080 / matcher 28100 / collector 28200），避免与热门端口上的程序互相干扰；前端 `/api` 由 Vite 代理到后端 28080；内网穿透只暴露前端 25173，**不要**直接暴露后端
+- 邀请码在管理后台生成（可一码多人或不限人数）；邀请链接形如 `https://<域名>/login?invite=YKT-XXXX-XXXX`，新用户打开即自动填码注册；注册用户名不可纯数字、密码需 8 位以上且含字母和数字
 
 ## License
 
