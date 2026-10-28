@@ -88,7 +88,7 @@ watch(
     if (status === 'SCANNED' && qrVisible.value) {
       qrVisible.value = false
       lastSeen.value = store.events.length
-      ElMessage.success('扫码成功！请在操作菜单里确认答案库与做题方式')
+      ElMessage.success('扫码成功！请勾选要做的卷子，再点下方「开始做题」')
     }
   },
 )
@@ -280,7 +280,8 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
           </div>
         </div>
 
-        <div class="menu-group">
+        <!-- 手机端开始按钮统一在底部动作条，这里隐藏避免重复 -->
+        <div class="menu-group mobile-hide">
           <span class="eyebrow">开始方式（二选一）</span>
           <el-button
             type="primary"

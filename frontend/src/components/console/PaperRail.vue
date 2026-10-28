@@ -136,7 +136,8 @@ async function startChecked(mode: TaskMode) {
         <span class="box" :class="{ on: allChecked }">{{ allChecked ? '✓' : '' }}</span>
         全选
       </label>
-      <span class="pick-count">{{ store.selectedPapers.length ? `已选 ${store.selectedPapers.length} 套` : '勾选卷子后点右侧按钮' }}</span>
+      <span class="pick-count mobile-hide">{{ store.selectedPapers.length ? `已选 ${store.selectedPapers.length} 套` : '勾选卷子后点右侧按钮' }}</span>
+      <span class="pick-count mobile-only">{{ store.selectedPapers.length ? `已选 ${store.selectedPapers.length} 套` : '勾选卷子后点下方「开始做题」' }}</span>
       <button class="pick-go" type="button" :disabled="!store.selectedPapers.length" @click="startChecked('answer')">
         做题
       </button>
@@ -580,11 +581,12 @@ async function startChecked(mode: TaskMode) {
   .pick-count {
     font-size: 12.5px;
   }
+  /* 手机：做题/取答案按钮统一收进底部动作条，这里不再重复 */
   .pick-go {
-    height: 36px;
-    padding: 0 16px;
-    font-size: 13.5px;
-    border-radius: var(--r-sm);
+    display: none;
+  }
+  .pick-count.mobile-only {
+    display: block !important;
   }
   .rail-body {
     padding: 10px 12px 16px;
