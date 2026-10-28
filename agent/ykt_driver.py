@@ -111,6 +111,21 @@ class Driver:
         except Exception:
             pass
 
+    def _tick_safe(self, on_tick):
+        """等待循环里的回调（推帧/中止检查）。
+
+        AbortTask 必须向上传播——用户点暂停后要立刻停手；
+        其它异常（截图失败等）忽略，不能因为推帧失败打断做题。
+        """
+        if on_tick is None:
+            return
+        try:
+            on_tick()
+        except AbortTask:
+            raise
+        except Exception:
+            pass
+
     def dismiss_popups(self):
         """关闭引导弹窗，避免遮挡点击。"""
         for text in ("我知道了", "知道了", "跳过"):
@@ -397,11 +412,7 @@ class Driver:
         """
         last, stable = -1, 0
         for _ in range(40):
-            if on_tick is not None:
-                try:
-                    on_tick()
-                except Exception:
-                    pass
+            self._tick_safe(on_tick)
             if want_name:
                 try:
                     if self.page.evaluate(js_has, want_name):
@@ -425,7 +436,7 @@ class Driver:
                 stable = 0
                 last = now
 
-    def list_papers(self):
+    def list_papers(self, on_tick=None):
         """解析学习日志的试卷卡片与其所属日期分组。
 
         返回 [{name, fullScore, questionCount, score, answered, date}]。
@@ -433,7 +444,7 @@ class Driver:
         日期不依赖特定类名：按 DOM 顺序扫描，文本形如「09-12 周六」「12.25」
         的元素视为日期分组标题，其后的卡片都归属该日期。
         """
-        self._expand_log()          # 先把懒加载的分组全部滚出来
+        self._expand_log(on_tick=on_tick)   # 先把懒加载的分组全部滚出来（期间检查暂停）
         js = r"""
         () => {
           const out = [];
@@ -509,11 +520,7 @@ class Driver:
         self.page.goto(EXAM_DETAIL.format(c=course_id, e=exam_id), wait_until="domcontentloaded")
         deadline = time.time() + 3
         while time.time() < deadline:
-            if on_tick is not None:
-                try:
-                    on_tick()
-                except Exception:
-                    pass
+            self._tick_safe(on_tick)
             if self.exam_entry_state() != "unknown":
                 return
             self.page.wait_for_timeout(250)
@@ -652,11 +659,7 @@ class Driver:
             # 等题目块出现（最多 10s），期间持续回调推帧
             deadline = time.time() + 10
             while time.time() < deadline:
-                if on_tick is not None:
-                    try:
-                        on_tick()
-                    except Exception:
-                        pass
+                self._tick_safe(on_tick)
                 try:
                     if self.page.locator(QUESTION_BLOCK).count():
                         return True
@@ -670,11 +673,7 @@ class Driver:
         """等待答题页渲染完成（题目块出现）。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
-            if on_tick is not None:
-                try:
-                    on_tick()
-                except Exception:
-                    pass
+            self._tick_safe(on_tick)
             if self.page.locator(QUESTION_BLOCK).count():
                 return True
             self.page.wait_for_timeout(400)
@@ -773,11 +772,7 @@ class Driver:
         # 等跳转结果页（最多 8s），期间持续回调推帧
         deadline = time.time() + 8
         while time.time() < deadline:
-            if on_tick is not None:
-                try:
-                    on_tick()
-                except Exception:
-                    pass
+            self._tick_safe(on_tick)
             if "/result/" in (self.page.url or ""):
                 break
             self.page.wait_for_timeout(300)
@@ -807,11 +802,7 @@ class Driver:
         """等结果页题目块渲染完成（出现即返回；等待期间回调推帧，预览不卡）。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
-            if on_tick is not None:
-                try:
-                    on_tick()
-                except Exception:
-                    pass
+            self._tick_safe(on_tick)
             if self.page.locator(RESULT_BLOCK).count():
                 self.page.wait_for_timeout(400)
                 return True
@@ -894,11 +885,7 @@ class Driver:
         """等任意 frame 里出现正确答案标记（.dot-success）；等待期间回调推帧。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
-            if on_tick is not None:
-                try:
-                    on_tick()
-                except Exception:
-                    pass
+            self._tick_safe(on_tick)
             for f in self._frames():
                 try:
                     if f.locator(".dot-success").count():

@@ -107,11 +107,15 @@ class Worker:
         self._activity_at = time.time()
 
     def _tick(self, driver, task_id):
-        """长等待期间的心跳回调：推一帧实时画面（按 FRAME_INTERVAL 节流）。
+        """长等待期间的心跳回调：推一帧实时画面（按 FRAME_INTERVAL 节流）+ 检查中止。
 
         交卷/等结果页/翻页这些阶段原本不推帧，前端预览会卡住不动；
         由 driver 的轮询循环每 300-400ms 回调一次，预览就一直是活的。
+        同时在这里检查中止标志——用户点暂停/中断后，最迟 0.4s 内停手，
+        不必等到下一个「安全点」（以前要等交卷/采集整段跑完，最长几十秒）。
         """
+        if self._abort.is_set():
+            raise AbortTask()
         self._touch()
         self._push_frame(driver, task_id)
 
@@ -128,9 +132,9 @@ class Worker:
         """心跳：①播报长耗时阶段；②轮询任务状态，被暂停/中断时置中止标志。
 
         播报只在超过 4.5s 没有任何进展推送时才发声——正常逐题作答期间保持安静；
-        状态轮询让「暂停」真正生效：Agent 在安全点（下一题/下一卷/下一阶段前）停手。
+        状态轮询让「暂停」真正生效：2s 一轮，配合执行流里的中止检查快速停手。
         """
-        while not stop_evt.wait(5):
+        while not stop_evt.wait(2):
             # 1) 状态巡检：PAUSED/CANCELLED（或已被后端结束）→ 请求中止
             try:
                 decision = self.backend.batch_decision(task_id)
@@ -240,6 +244,11 @@ class Worker:
                      self.name, task.get("taskId"), task.get("batch"), task.get("mode"))
             try:
                 self.run_task(task)
+            except AbortTask:
+                # 用户暂停/中断：后端状态已是 PAUSED/CANCELLED，绝不能按「任务失败」回传
+                # （否则 FAILED 会覆盖暂停态，任务变成不可恢复）
+                log.info("[%s] 任务 #%s 已在安全点停止（暂停/中断），保持后端状态",
+                         self.name, task.get("taskId"))
             except Exception as exc:
                 log.exception("[%s] 任务执行异常", self.name)
                 try:
@@ -317,7 +326,7 @@ class Worker:
             self._push_frame(driver, task_id, force=True)
 
             self._stage(task_id, "读取账号作业清单")
-            entries = driver.list_papers()
+            entries = driver.list_papers(on_tick=lambda: self._tick(driver, task_id))
             log.info("[%s] 课程 %s 账号实际作业 %d 套：%s",
                      self.name, course, len(entries), [e.get("name") for e in entries])
 
@@ -472,6 +481,15 @@ class Worker:
                 summary = (f"全部试卷处理完成：作答 {stats['answered']} 套，取答案 {stats['fetched']} 套"
                            f"，复用 {stats['reused']} 套，失败 {stats['failed']} 套")
             self._safe_finish(task, "SUCCESS", summary=summary)
+        except AbortTask:
+            # 暂停/中断发生在任何阶段（扫码等待、试卷列表扫描、批次确认…）都在此收口：
+            # 后端状态已是 PAUSED/CANCELLED，只补一条说明，绝不覆盖状态
+            log.info("[%s] 任务 #%s 在安全点停止（暂停/中断）", self.name, task_id)
+            try:
+                self.backend.post_progress(
+                    task_id, message="已在安全点停止；点「继续做题」可接着处理剩余卷子")
+            except Exception:
+                pass
         except TaskGone:
             log.info("[%s] 任务 #%s 已被用户删除，停止执行（浏览器保留）", self.name, task_id)
         except LoginRequired as exc:
@@ -502,6 +520,8 @@ class Worker:
 
         deadline = time.time() + config.BATCH_WAIT_TIMEOUT
         while time.time() < deadline:
+            if self._abort.is_set():
+                raise AbortTask()  # 等待批次确认期间被暂停/中断：立刻收口
             if driver is not None:
                 self._push_frame(driver, task_id)
             try:
@@ -645,6 +665,8 @@ class Worker:
                     task_id, name, exam_id, status="ANSWERING",
                     message="已交卷但 0 分（空白卷）：自动重做一遍，交卷后即可采集答案入库")
 
+            if self._abort.is_set():
+                raise AbortTask()  # 用户已暂停/中断：不再进入答题页
             self._stage(task_id, f"{name}：进入答题页")
             if not driver.enter_exam(on_tick=tick):
                 raise RuntimeError("未找到开始答题按钮")
@@ -723,6 +745,8 @@ class Worker:
                 if report.get("bad"):
                     log.warning("[%s] %s 校验差异 %d 处", self.name, name, report["bad"])
 
+            if self._abort.is_set():
+                raise AbortTask()  # 用户已暂停/中断：不交卷（半途作答雨课堂会保留，恢复后可继续）
             self._stage(task_id, f"{name}：交卷中")
             driver.submit(on_tick=tick)
             self._push_frame(driver, task_id, force=True)

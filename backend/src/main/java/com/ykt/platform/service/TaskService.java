@@ -511,7 +511,13 @@ public class TaskService {
             // 任务已被中断：忽略 Agent 迟到的完成回传，保留中断态
             return OkResponse.of();
         }
-        task.setStatus(parseTaskStatus(request.status()));
+        TaskStatus reported = parseTaskStatus(request.status());
+        if (task.getStatus() == TaskStatus.PAUSED && reported == TaskStatus.FAILED) {
+            // 用户暂停后 Agent 的迟到回传：失败态不得覆盖暂停态，
+            // 否则任务会变成不可恢复的失败，暂停/继续链路被破坏
+            return OkResponse.of();
+        }
+        task.setStatus(reported);
         if (request.score() != null && !request.score().isBlank()) {
             task.setScore(request.score());
         }
