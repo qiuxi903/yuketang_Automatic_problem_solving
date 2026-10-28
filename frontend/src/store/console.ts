@@ -489,6 +489,26 @@ export const useConsoleStore = defineStore('console', () => {
    */
   async function continueTask(papers: string[], mode: TaskMode = 'answer') {
     const reuseYkt = session.value?.yktName ?? null
+    // 未勾选任何卷子 = 「继续作答」：只处理当前任务里还没完成的卷子，
+    // 已完成的（已交卷/已复用/已采集）不重复走一遍
+    let targets = [...papers]
+    if (!targets.length) {
+      const t0 = task.value
+      const DONE = ['SUBMITTED', 'REUSED', 'COLLECTED']
+      const remaining = [...new Set(
+        (t0?.items ?? [])
+          .filter((it) => it.paper && !DONE.includes(it.status))
+          .map((it) => it.paper),
+      )]
+      if (t0 && t0.items.length && !remaining.length) {
+        ElMessage.info('当前批次的卷子都已处理完成，没有需要继续的卷子')
+        return null
+      }
+      if (remaining.length) {
+        targets = remaining
+        log('info', `继续作答：剩余 ${targets.length} 套未完成，已完成的不会重做`)
+      }
+    }
     starting.value = true
     try {
       const verb = mode === 'collect' ? '只取答案' : '做题'
@@ -525,9 +545,9 @@ export const useConsoleStore = defineStore('console', () => {
         }
         const tid = t?.taskId ?? activeTaskId.value
         if (!tid) return null
-        await setTaskBatch(tid, { batch: best, mode, redoPapers: papers })
+        await setTaskBatch(tid, { batch: best, mode, redoPapers: targets })
         log('ok', `任务 #${tid} 已开始（${verb}）`,
-          `自动匹配答案库批次 ${best}；勾选 ${papers.length} 套`)
+          `自动匹配答案库批次 ${best}；处理 ${targets.length} 套`)
         await loadTask(tid)
         await loadSession()
         await loadMyTasks()
@@ -539,10 +559,10 @@ export const useConsoleStore = defineStore('console', () => {
         sessionId,
         batch: t.batch,
         mode,
-        redoPapers: papers.length ? papers : undefined,
+        redoPapers: targets.length ? targets : undefined,
         reuseYkt,
       })
-      log('ok', `任务 #${createdTask.taskId} 已创建`, `勾选 ${papers.length} 套 · ${verb}；沿用当前登录直接开做`)
+      log('ok', `任务 #${createdTask.taskId} 已创建`, `处理 ${targets.length} 套 · ${verb}；沿用当前登录直接开做`)
       await attachTask(createdTask.taskId)
       return createdTask.taskId
     } finally {
@@ -656,6 +676,20 @@ export const useConsoleStore = defineStore('console', () => {
     if (id === activeTaskId.value) return
     clearEvents()
     await attachTask(id)
+  }
+
+  /** 继续（恢复）已暂停的任务：接着处理剩余卷子，已完成的不会重做。 */
+  async function resumeTaskById(id: number) {
+    busy.value = true
+    try {
+      await resumeTask(id)
+      log('info', `任务 #${id} 已继续`, 'Agent 将接着处理剩余卷子（已完成的不会重做）')
+      ElMessage.success(`任务 #${id} 已继续`)
+      if (id === activeTaskId.value) await loadTask(id)
+      await loadMyTasks()
+    } finally {
+      busy.value = false
+    }
   }
 
   /** 中断任务：二次确认后停止执行并置为终端态「已中断」；若为当前任务则刷新其快照。 */
@@ -809,6 +843,7 @@ export const useConsoleStore = defineStore('console', () => {
     loadMyTasks,
     restoreTask,
     switchTask,
+    resumeTaskById,
     interruptTaskById,
     deleteTaskById,
     loadSession,

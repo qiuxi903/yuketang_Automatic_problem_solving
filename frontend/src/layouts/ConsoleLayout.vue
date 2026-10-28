@@ -206,6 +206,14 @@ function handleLogout() {
             <span class="task-time">创建于 {{ formatDateTime(item.createdAt) }}</span>
             <div class="task-actions">
               <button
+                v-if="item.status === 'PAUSED'"
+                class="task-act is-go"
+                type="button"
+                @click.stop="consoleStore.resumeTaskById(item.taskId)"
+              >
+                继续
+              </button>
+              <button
                 v-if="canInterrupt(item.status)"
                 class="task-act"
                 type="button"
@@ -655,5 +663,15 @@ function handleLogout() {
   color: var(--danger);
   border-color: var(--danger);
   background: var(--danger-100);
+}
+.task-act.is-go {
+  color: var(--accent-700);
+  border-color: var(--accent-200);
+  background: var(--accent-050);
+}
+.task-act.is-go:hover {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
 }
 </style>

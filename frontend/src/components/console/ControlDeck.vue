@@ -372,6 +372,11 @@ defineExpose({
           >
             {{ store.task?.status === 'PAUSED' ? '继续做题' : '暂停做题' }}
           </el-button>
+          <p v-if="store.canPause" class="hint">
+            {{ store.task?.status === 'PAUSED'
+              ? '点「继续做题」会接着处理剩余卷子，已完成的不会重做。'
+              : '暂停后 Agent 在安全点停下；想彻底结束请到「我的任务」里中断。' }}
+          </p>
         </div>
 
         <div class="menu-group">

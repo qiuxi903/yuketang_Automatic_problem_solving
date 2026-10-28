@@ -358,6 +358,26 @@ class Worker:
                 log.info("[%s] 重做任务：本次只重做 %d 套：%s",
                          self.name, len(plan), [p["name"] for p in plan])
 
+            # 续做（暂停后恢复 / 继续作答）：已完成（已交卷/已复用/已采集）的卷子跳过，
+            # 不重复走一遍——否则恢复任务会从第一套重新翻结果页，看起来像从头再来
+            if not redo:
+                done_names = {
+                    it.get("paper") for it in (task.get("items") or [])
+                    if it.get("paper") and it.get("status") in ("SUBMITTED", "REUSED", "COLLECTED")
+                }
+                if done_names:
+                    before = len(plan)
+                    plan = [
+                        p for p in plan
+                        if not any(d == p["name"] or d in p["name"] or p["name"] in d for d in done_names)
+                    ]
+                    skipped = before - len(plan)
+                    if skipped:
+                        log.info("[%s] 续做：跳过已完成 %d 套，继续处理剩余 %d 套",
+                                 self.name, skipped, len(plan))
+                        self.backend.post_progress(
+                            task_id, message=f"续做：跳过已完成 {skipped} 套，继续处理剩余 {len(plan)} 套")
+
             # 未勾选任何卷子（「做全部作业」）：把账号里未入答案库的新卷子也纳入计划，
             # 否则新卷子会被静默跳过（用户以为「全部作业」包含它们）
             if not redo:
