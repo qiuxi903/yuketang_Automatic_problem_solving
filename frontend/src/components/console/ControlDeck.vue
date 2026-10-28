@@ -306,7 +306,10 @@ defineExpose({
           >
             {{ store.selectedPapers.length ? '取勾选卷子的答案' : '先在清单勾选卷子' }}
           </el-button>
-          <p class="hint">没勾选就直接点的话，会处理账号里的全部作业。</p>
+          <p class="hint">
+            没勾选就直接点的话，会处理所选批次的全部卷子，外加账号里未入答案库的新卷子
+            （新卷子用兜底 API 作答，交卷后答案自动入库）。
+          </p>
         </div>
       </template>
 

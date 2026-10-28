@@ -357,6 +357,45 @@ class Worker:
                     in_plan.add(ename)
                 log.info("[%s] 重做任务：本次只重做 %d 套：%s",
                          self.name, len(plan), [p["name"] for p in plan])
+
+            # 未勾选任何卷子（「做全部作业」）：把账号里未入答案库的新卷子也纳入计划，
+            # 否则新卷子会被静默跳过（用户以为「全部作业」包含它们）
+            if not redo:
+                lib_names = self._lib_names()
+                in_plan = {p["name"] for p in plan}
+                fresh = []
+                for e in entries:
+                    ename = e.get("name") or ""
+                    if not ename or any(ename in n or n in ename for n in in_plan):
+                        continue
+                    if self._in_lib(lib_names, ename):
+                        continue  # 已在答案库（含其它批次）→ 不算新卷子
+                    fresh.append(e)
+                if fresh:
+                    names = "、".join(e["name"] for e in fresh[:8])
+                    more = " 等" if len(fresh) > 8 else ""
+                    if mode == "collect":
+                        # 采集模式：新卷子没做过，结果页取不到答案，如实说明并引导去做题
+                        self.backend.post_progress(
+                            task_id,
+                            message=f"另有 {len(fresh)} 套新卷子尚未作答，无法取答案（{names}{more}）；"
+                                    "请用「做题」处理，做完答案会自动入库")
+                    else:
+                        for e in fresh:
+                            plan.append({
+                                "name": e["name"],
+                                "examId": e.get("examId"),
+                                "courseId": e.get("courseId"),
+                                "entryText": e.get("entryText"),
+                                "answered": bool(e.get("answered")),
+                                "entryStatus": e.get("status"),
+                                "newPaper": True,  # 批次外新卷：库内暂无答案，交卷后采答案入库
+                            })
+                        log.info("[%s] 检测到 %d 套未入答案库的新卷子，一并处理：%s",
+                                 self.name, len(fresh), [e["name"] for e in fresh])
+                        self.backend.post_progress(
+                            task_id,
+                            message=f"检测到 {len(fresh)} 套新卷子（未入答案库），将一并作答并采集答案：{names}{more}")
             if mode == "collect":
                 answered_cnt = len([p for p in plan if p.get("answered")])
                 log.info("[%s] 批次 %s 采集模式：待处理 %d 套，其中已交卷 %d 套（仅读结果页取答案）",
@@ -499,8 +538,9 @@ class Worker:
         # collect 模式下不得强推交卷（门禁会拦），走正常采集分流
         redo = [r for r in (task.get("redoPapers") or []) if r]
         if mode == "answer" and any(r == name or r in name or name in r for r in redo):
-            log.info("[%s] %s 在重做清单，直接重做（答案批次 %s）", self.name, name, lib_batch)
-            return "answered" if self._answer_and_submit(driver, task, lib_batch, paper, mode) else "failed"
+            log.info("[%s] %s 在重做清单，直接重做（答案批次 %s）", self.name, name, lib_batch or "新卷子")
+            # 库里有答案就用库所在批次，否则用任务批次（新卷子：build_idx 会返回无答案，走兜底）
+            return "answered" if self._answer_and_submit(driver, task, lib_batch or batch, paper, mode) else "failed"
 
         # 规则3：答案库已有（含别的账号采集的）→ 直接复用，不抓取、不作答、不交卷
         if lib_batch and (mode == "collect" or answered):
@@ -598,6 +638,14 @@ class Worker:
             self._stage(task_id, f"{name}：匹配答案库")
             built = self.matcher.build_idx(batch, name, questions)
             idx = built.get("idx", [])
+            if not idx and questions:
+                # 新卷子：答案库暂无此卷（build_idx 返回 NO_ANSWER_FILE）→ 全部题目交给兜底 API，
+                # 否则只能交白卷拿 0 分（交卷后答案仍会采集入库，供后续复用）
+                idx = [-1] * len(questions)
+                log.info("[%s] %s 答案库暂无此卷，%d 题全部走兜底 API", self.name, name, len(questions))
+                self.backend.post_progress(
+                    task_id, name, exam_id,
+                    message=f"新卷子：答案库暂无该卷，{len(questions)} 题将用兜底 API 作答，交卷后答案自动入库")
             if built.get("lowConfidence"):
                 log.warning("[%s] %s 低置信题 %d 道", self.name, name, len(built["lowConfidence"]))
             # 新题型（填空/简答等无选项题）：如实告知用户，自动跳过不点选
@@ -640,9 +688,11 @@ class Worker:
                 driver.click_answers(idx)
                 self._push_frame(driver, task_id, force=True)
 
-            report = self.matcher.verify(batch, name, selected)
-            if report.get("bad"):
-                log.warning("[%s] %s 校验差异 %d 处", self.name, name, report["bad"])
+            # 只有答案库里确有该卷时才做一致性校验（新卷子没有基准答案，校验无意义）
+            if self._lib_has_answers(batch, name):
+                report = self.matcher.verify(batch, name, selected)
+                if report.get("bad"):
+                    log.warning("[%s] %s 校验差异 %d 处", self.name, name, report["bad"])
 
             self._stage(task_id, f"{name}：交卷中")
             driver.submit(on_tick=tick)
@@ -719,7 +769,8 @@ class Worker:
             return False
 
     def _resolve_lib_batch(self, batch, name):
-        """返回答案库中实际存有该卷答案的批次：优先任务批次，否则全库扫描。
+        """返回答案库中实际存有该卷答案的批次：优先任务��次，否则全库扫描；
+        全库都没有该卷 → None（新卷子）。
 
         采集会把新卷子的答案写进「当天日期」的批次，任务绑定的批次未必是它所在——
         跨批次解析后，复用与作答都能用上全库最新的答案。
@@ -737,7 +788,25 @@ class Worker:
                         return bn
         except Exception:
             pass
-        return batch
+        return None
+
+    def _lib_names(self):
+        """答案库里已有的全部卷名（跨批次，一次拉取），用于��速判断「新卷子」。"""
+        names = set()
+        try:
+            for b in self.matcher.papers().get("batches", []):
+                for p in b.get("papers", []):
+                    n = p.get("name")
+                    if n:
+                        names.add(n)
+        except Exception:
+            pass
+        return names
+
+    @staticmethod
+    def _in_lib(lib_names, name):
+        """卷名是否已在答案库（宽松匹配，容忍名称前后缀差异）。"""
+        return any(n == name or n in name or name in n for n in lib_names)
 
     def _lib_has_answers(self, batch, name):
         """答案库中是否已存在该卷答案（跨批次查找）。"""
