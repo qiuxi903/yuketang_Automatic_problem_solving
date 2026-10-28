@@ -603,14 +603,15 @@ fn build_frontend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<Sp
 // ---------------------------------------------------------------- 批量操作
 
 /// 一键启动：matcher/collector/backend 立即起；后端 HTTP 就绪后再起 frontend + agent。
+/// 全部动作在后台线程执行（孤儿清理要跑 PowerShell，绝不能阻塞 UI 线程）。
 pub fn start_all(core: &Arc<Mutex<Core>>) {
-    // 一键启动前先清孤儿 Agent，避免旧进程带着过期端口一直刷连接失败警告
-    kill_orphan_agents(core, 4);
-    for key in [0usize, 1, 2] {
-        start_service(core, key);
-    }
     let core2 = Arc::clone(core);
     thread::spawn(move || {
+        // 一键启动前先清孤儿 Agent，避免旧进程带着过期端口一直刷连接失败警告
+        kill_orphan_agents(&core2, 4);
+        for key in [0usize, 1, 2] {
+            start_service(&core2, key);
+        }
         let deadline = Instant::now() + Duration::from_secs(120);
         loop {
             // 等后端启动流程（端口解析/接管）结束再读端口，避免把中间态端口写进 Agent 环境
@@ -632,38 +633,48 @@ pub fn start_all(core: &Arc<Mutex<Core>>) {
     });
 }
 
-/// 全部停止，并清扫端口上的平台残留进程（上次强杀启动器留下的孤儿等）。
+/// 全部停止：UI 线程只做状态切换（立即返回），杀进程与残留清扫都在后台线程执行
+/// （taskkill / netstat 每次几百毫秒，串行 5 个服务会卡住界面几秒 → 系统标记「未响应」）。
 pub fn stop_all(core: &Arc<Mutex<Core>>) {
-    {
-        let mut c = core.lock().unwrap();
-        for key in 0..SERVICES.len() {
-            if c.states[key].running || c.states[key].pid.is_some() {
-                stop_one_locked(&mut c, key);
-            }
-        }
-    }
     let core2 = Arc::clone(core);
     thread::spawn(move || {
+        for key in 0..SERVICES.len() {
+            stop_one_sync(&core2, key);
+        }
         thread::sleep(Duration::from_millis(1500)); // 等停止动作先落地
         sweep_orphans(&core2);
     });
 }
 
-pub fn stop_one_locked(core: &mut Core, key: usize) {
-    if let Some(pid) = core.states[key].pid.take() {
+/// 同步停止单个服务：会阻塞调用线程执行 taskkill / netstat —— 只能在后台线程调用。
+fn stop_one_sync(core: &Arc<Mutex<Core>>, key: usize) {
+    let (pid, port) = {
+        let mut c = core.lock().unwrap();
+        let s = &mut c.states[key];
+        let active = s.running || s.pid.is_some()
+            || (s.status != "未启动" && s.status != "已停止");
+        if !active {
+            return;
+        }
+        let pid = s.pid.take();
+        let port = s.port;
+        s.running = false;
+        s.status = "已停止".to_string();
+        c.log(key, Some(Level::Info), "已停止");
+        (pid, port)
+    };
+    if let Some(pid) = pid {
         kill_tree(pid);
     }
-    kill_service_port(&mut core.states[key]);
-    core.states[key].running = false;
-    core.states[key].status = "已停止".to_string();
-    core.log(key, Some(Level::Info), "已停止");
+    if let Some(port) = port {
+        kill_port_holder(port);
+    }
 }
 
 /// 按端口补刀：python.exe 在 Windows 上存在「启动器父进程 + 真正解释器子进程」结构，
 /// 父进程先退时 taskkill /T 会扑空，端口上的真正服务进程要按端口再清一次。
-/// 仅在进程曾登记过（确属本平台服务）时调用，防止误杀后来占用端口的外来程序。
-fn kill_service_port(state: &mut ServiceState) {
-    let Some(port) = state.port else { return };
+/// 仅在服务确属本平台（曾登记过 PID）时调用，防止误杀后来占用端口的外来程序。
+fn kill_port_holder(port: u16) {
     if !port_open(port) {
         return;
     }
@@ -674,20 +685,17 @@ fn kill_service_port(state: &mut ServiceState) {
     }
 }
 
+/// 单个服务停止（UI 按钮）：立即返回，杀进程在后台线程执行。
 pub fn stop_one(core: &Arc<Mutex<Core>>, key: usize) {
-    let mut c = core.lock().unwrap();
-    if c.states[key].running || c.states[key].pid.is_some() {
-        stop_one_locked(&mut c, key);
-    } else if c.states[key].status != "未启动" && c.states[key].status != "已停止" {
-        stop_one_locked(&mut c, key);
-    }
+    let core2 = Arc::clone(core);
+    thread::spawn(move || stop_one_sync(&core2, key));
 }
 
-/// 重启 = 停止 → 等端口释放 → 再启动。
+/// 重启 = 停止 → 等端口释放 → 再启动（全程后台线程，不阻塞 UI）。
 pub fn restart_one(core: &Arc<Mutex<Core>>, key: usize) {
     let core2 = Arc::clone(core);
     thread::spawn(move || {
-        stop_one(&core2, key);
+        stop_one_sync(&core2, key);
         thread::sleep(Duration::from_millis(800));
         start_service(&core2, key);
     });
@@ -722,7 +730,9 @@ pub fn kill_all_quiet(core: &Arc<Mutex<Core>>) {
             kill_tree(pid);
         }
         if was_ours {
-            kill_service_port(s);
+            if let Some(port) = s.port {
+                kill_port_holder(port);
+            }
         }
         s.running = false;
     }
