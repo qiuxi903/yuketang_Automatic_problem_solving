@@ -248,8 +248,10 @@ fn run_start(core: &Arc<Mutex<Core>>, key: usize, tx: &mpsc::Sender<Msg>, root: 
         }
     }
 
-    // 2) 构建启动命令（mvn/npm 等耗时准备在这里发生）
-    let plan = build_plan(core, key, tx, root)?;
+    // 2) 构建启动命令（mvn/npm 等耗时准备在这里发生；None = 已接管/无需启动）
+    let Some(plan) = build_plan(core, key, tx, root)? else {
+        return Ok(());
+    };
 
     // 3) 拉起子进程（隐藏窗口，stdout/stderr 双管道由读者线程汇聚）
     let mut cmd = Command::new(&plan.argv[0]);
@@ -298,6 +300,7 @@ fn run_start(core: &Arc<Mutex<Core>>, key: usize, tx: &mpsc::Sender<Msg>, root: 
 }
 
 /// 单个输出流的日志泵：逐行送到 channel（stdout/stderr 类型不同，泛型收敛）。
+/// 命中已知的「看不懂但高频」的报错时，补一条人话提示。
 fn spawn_reader<S: std::io::Read + Send + 'static>(
     tx: mpsc::Sender<Msg>,
     key: usize,
@@ -308,12 +311,52 @@ fn spawn_reader<S: std::io::Read + Send + 'static>(
         for line in reader.lines() {
             match line {
                 Ok(l) => {
+                    let hint = if l.contains("Unable to determine Dialect")
+                        || l.contains("Database may be already in use")
+                        || l.contains("lockFileChannel")
+                    {
+                        Some("⚠ 后端连不上数据库：H2 数据库文件同一时刻只允许一个后端实例。\
+                              多半是已有另一个后端在运行（或上次异常退出残留），请先停止其它后端再启动")
+                    } else {
+                        None
+                    };
                     let _ = tx.send(Msg::Log { key, level: None, text: l });
+                    if let Some(h) = hint {
+                        let _ = tx.send(Msg::Log { key, level: Some(Level::Warn), text: h.to_string() });
+                    }
                 }
                 Err(_) => break,
             }
         }
     })
+}
+
+/// 查找已在运行的后端（命令行含 ykt-platform 的 java 进程），返回 (pid, 端口)。
+/// 后端独占 H2 数据库文件，启动前必须先确认没有第二个实例，否则新实例会因库锁崩溃。
+fn find_running_backend() -> Option<(u32, Option<u16>)> {
+    let script = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; \
+        Get-CimInstance Win32_Process -Filter \"Name='java.exe'\" | \
+        Where-Object { $_.CommandLine -like '*ykt-platform*' } | \
+        ForEach-Object { \"$($_.ProcessId)|$($_.CommandLine)\" }";
+    let mut cmd = Command::new("powershell");
+    let out = set_no_window(&mut cmd)
+        .args(["-NoProfile", "-Command", script])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    for line in text.lines() {
+        let line = line.trim();
+        let Some((pid_s, cmdline)) = line.split_once('|') else { continue };
+        let Ok(pid) = pid_s.trim().parse::<u32>() else { continue };
+        if pid == std::process::id() {
+            continue;
+        }
+        let port = cmdline
+            .split_whitespace()
+            .find_map(|t| t.strip_prefix("--server.port=").and_then(|v| v.parse::<u16>().ok()));
+        return Some((pid, port));
+    }
+    None
 }
 
 // ---------------------------------------------------------------- 各服务的命令构建
@@ -333,19 +376,19 @@ fn build_plan(
     key: usize,
     _tx: &mpsc::Sender<Msg>,
     root: &Path,
-) -> Result<SpawnPlan, String> {
+) -> Result<Option<SpawnPlan>, String> {
     match key {
         0 | 1 => {
             let port = core.lock().unwrap().states[key].port.unwrap_or(SERVICES[key].base_port.unwrap());
-            Ok(SpawnPlan {
+            Ok(Some(SpawnPlan {
                 argv: vec![python(), "-m".into(), "uvicorn".into(), "app:app".into(),
                            "--host".into(), "0.0.0.0".into(), "--port".into(), port.to_string()],
                 cwd: root.join(if key == 0 { "matcher" } else { "collector" }),
                 env: vec![],
-            })
+            }))
         }
         2 => build_backend(core, key, root),
-        3 => build_frontend(core, key, root),
+        3 => build_frontend(core, key, root).map(Some),
         4 => {
             // agent：注入实际服务地址（端口可能已因保留区间而漂移）
             let (course, m, c, b) = {
@@ -355,7 +398,7 @@ fn build_plan(
                  cc.states[1].port.unwrap_or(28200),
                  cc.states[2].port.unwrap_or(28080))
             };
-            Ok(SpawnPlan {
+            Ok(Some(SpawnPlan {
                 argv: vec![python(), "main.py".into()],
                 cwd: root.join("agent"),
                 env: vec![
@@ -364,7 +407,7 @@ fn build_plan(
                     ("COLLECTOR_BASE".to_string(), format!("http://localhost:{c}")),
                     ("BACKEND_BASE".to_string(), format!("http://localhost:{b}")),
                 ],
-            })
+            }))
         }
         _ => unreachable!(),
     }
@@ -429,7 +472,27 @@ fn run_prepare(core: &Arc<Mutex<Core>>, key: usize, argv: &[&str], cwd: &Path,
     Ok(())
 }
 
-fn build_backend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<SpawnPlan, String> {
+fn build_backend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<Option<SpawnPlan>, String> {
+    // 后端独占 H2 数据库文件：已有实例在跑就直接接管，绝不启动第二个
+    // （第二个会因库锁连不上库，报 "Unable to determine Dialect" 崩溃）
+    if let Some((pid, port)) = find_running_backend() {
+        let mine = core.lock().unwrap().states[key].pid;
+        if mine != Some(pid) {
+            let mut c = core.lock().unwrap();
+            if let Some(p) = port {
+                c.states[key].port = Some(p);
+                c.reserved.insert(p);
+            }
+            c.states[key].pid = Some(pid);
+            c.states[key].running = true;
+            c.states[key].status = "已在运行".to_string();
+            c.log(key, Some(Level::Info), format!(
+                "检测到后端已在运行（PID {pid}{}），直接接管，不再启动第二个（H2 数据库同一时刻只允许一个后端）",
+                port.map(|p| format!("，端口 {p}")).unwrap_or_default()));
+            return Ok(None);
+        }
+    }
+
     let java = resolve_java();
 
     // jar 缺失或比源码旧 → 先打包（首次较慢）
@@ -471,7 +534,7 @@ fn build_backend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<Spa
     let argv = vec![java.to_string_lossy().into_owned(), "-jar".into(),
                     jar.to_string_lossy().into_owned(),
                     format!("--server.port={port}")];
-    Ok(SpawnPlan { argv, cwd: root.join("backend"), env: vec![] })
+    Ok(Some(SpawnPlan { argv, cwd: root.join("backend"), env: vec![] }))
 }
 
 fn build_frontend(core: &Arc<Mutex<Core>>, key: usize, root: &Path) -> Result<SpawnPlan, String> {

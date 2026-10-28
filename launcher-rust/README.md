@@ -14,7 +14,8 @@
 - 启动前自动清理端口上的**本平台残留进程**（按命令行特征识别，外来程序不动）
 - **端口治理（全部服务）**：端口被占用时一律结束占用者腾位（平台残留静默清理，外来程序也结束但在日志里写明 PID 与进程名）；端口被 Hyper-V/WSL 保留区间吞掉（bind 10013，杀无可杀）时向后扫描，选中的端口联动注入 agent（MATCHER_BASE/COLLECTOR_BASE/BACKEND_BASE）与 vite 代理（YKT_BACKEND_PORT），整条链路保持互通
 - 无界面自检：`ykt-launcher.exe --smoke` 真实拉起全部服务并汇报（用于验证环境，结束后自动清理）
-- 后端 jar 缺失自动 `mvn package`、前端 node_modules 缺失自动 `npm install`
+- 后端 jar 缺失或比源码旧时自动 `clean package` 重建；前端 node_modules 缺失自动 `npm install`
+- **后端单实例保护**：H2 数据库文件同一时刻只允许一个后端，启动前检测到已有后端在运行则直接接管（记录端口/PID），绝不启动第二个；日志里出现 H2 库锁报错时自动补一条人话提示
 - 子进程隐藏窗口运行，注入 `PYTHONIOENCODING=utf-8` 保证中文日志不乱码
 - 关闭窗口即停止全部服务（有服务在跑时先弹确认）；退出前兜底清理子进程
 
