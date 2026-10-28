@@ -93,46 +93,71 @@ watch(
   },
 )
 
-/* 任务结束弹窗：有「取答案未做」的卷子时，询问是否一键重做（每个任务只问一次）。 */
+/* 任务结束弹窗：可重做刷满分的卷子，询问是否一键重做（每个任务只问一次）。
+   - COLLECTED：取到答案但没做
+   - SUBMITTED 且未满分：做了但没拿满分（答案已入库，重做基本满分）
+   仅纳入「答案已进答案库」的卷子——否则重做也没有答案可用。 */
 const promptedTasks = new Set<number>()
 
-const collectedPapers = computed(() => {
-  const t = store.task
-  if (!t) return []
-  const terminal = t.status === 'SUCCESS' || t.status === 'FAILED' || t.status === 'CANCELLED'
-  if (!terminal) return []
-  return t.items.filter((it) => it.status === 'COLLECTED').map((it) => it.paper)
-})
+/** 分数是否未满（"12/50" → true；读不到分数 → 不纳入，避免误报）。 */
+function isBelowFull(score?: string | null): boolean {
+  if (!score) return false
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(score)
+  if (!m) return false
+  return Number(m[1]) < Number(m[2])
+}
 
-watch(
-  collectedPapers,
-  async (papers) => {
-    const t = store.task
-    if (!papers.length || !t || promptedTasks.has(t.taskId)) return
-    promptedTasks.add(t.taskId)
-    const preview = papers.slice(0, 5).join('、') + (papers.length > 5 ? ' 等' : '')
-    try {
-      await ElMessageBox.confirm(
-        `这些卷子已取到答案但没有重新做：${preview}（共 ${papers.length} 套）。` +
-          '答案已进库，现在重做基本满分（每套会消耗一次作答次数）。要把这些再做一遍吗？',
-        '取到答案但未做',
-        {
-          confirmButtonText: '把这些再做一遍',
-          cancelButtonText: '暂不重做',
-          type: 'info',
-          distinguishCancelAndClose: true,
-        },
-      )
-    } catch {
-      return // 暂不重做
+async function maybePromptRedo() {
+  const t = store.task
+  if (!t) return
+  const terminal = t.status === 'SUCCESS' || t.status === 'FAILED' || t.status === 'CANCELLED'
+  if (!terminal || promptedTasks.has(t.taskId)) return
+  promptedTasks.add(t.taskId)
+
+  // 刚采集的答案要反映到「是否已入库」，先刷新答案库清单
+  await store.refreshPaperDates()
+
+  const collected: string[] = []
+  const belowFull: string[] = []
+  for (const it of t.items) {
+    if (!it.paper) continue
+    if (it.status === 'COLLECTED') {
+      collected.push(it.paper)
+    } else if (it.status === 'SUBMITTED' && store.inLib(it.paper) && isBelowFull(it.score)) {
+      belowFull.push(it.paper)
     }
-    const id = await store.startRedoTask(papers)
-    if (id) {
-      qrVisible.value = true
-      ElMessage.success('重做任务已创建，请扫码登录雨课堂')
-    }
-  },
-)
+  }
+  const papers = [...collected, ...belowFull]
+  if (!papers.length) return
+
+  const preview = papers.slice(0, 5).join('、') + (papers.length > 5 ? ' 等' : '')
+  const parts: string[] = []
+  if (collected.length) parts.push(`${collected.length} 套已取到答案但没做`)
+  if (belowFull.length) parts.push(`${belowFull.length} 套已作答但没拿满分`)
+  try {
+    await ElMessageBox.confirm(
+      `检测到 ${parts.join('、')}：${preview}（共 ${papers.length} 套）。` +
+        '答案都已进库，现在重做基本满分（每套会消耗一次作答次数）。要把这些再做一遍吗？',
+      '可以重做刷满分',
+      {
+        confirmButtonText: '把这些再做一遍',
+        cancelButtonText: '暂不重做',
+        type: 'info',
+        distinguishCancelAndClose: true,
+      },
+    )
+  } catch {
+    return // 暂不重做
+  }
+  const id = await store.startRedoTask(papers)
+  if (id) {
+    qrVisible.value = true
+    ElMessage.success('重做任务已创建，请扫码登录雨课堂')
+  }
+}
+
+// 只在任务「本次会话内」跑到终态时询问一次；打开页面时已有的历史任务不打扰
+watch(() => store.task?.status, () => void maybePromptRedo())
 
 async function openLog() {
   logVisible.value = true

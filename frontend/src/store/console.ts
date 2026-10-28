@@ -560,6 +560,11 @@ export const useConsoleStore = defineStore('console', () => {
   /** 拉答案库清单，建立 卷名→日期 映射（试卷清单按日期分组展示）。 */
   async function loadPaperDates() {
     if (Object.keys(paperDates.value).length) return
+    await refreshPaperDates()
+  }
+
+  /** 强制重拉答案库清单（任务结束后用：刚采集的答案要反映到「是否已入库」判断）。 */
+  async function refreshPaperDates() {
     try {
       const result = await listPapers()
       const map: Record<string, string> = {}
@@ -568,7 +573,7 @@ export const useConsoleStore = defineStore('console', () => {
       }
       paperDates.value = map
     } catch {
-      paperDates.value = {}
+      // 拉取失败保留旧值，避免把已加载的清单清空
     }
   }
 
@@ -584,6 +589,12 @@ export const useConsoleStore = defineStore('console', () => {
       if (name.includes(libName) || libName.includes(name)) return date
     }
     return NEW_GROUP
+  }
+
+  /** 该卷答案是否已在答案库（跨批次）。 */
+  function inLib(name: string): boolean {
+    const d = paperDateOf(name)
+    return !!d && d !== NEW_GROUP
   }
 
   async function attachTask(id: number) {
@@ -790,7 +801,9 @@ export const useConsoleStore = defineStore('console', () => {
     toggleSelected,
     paperDates,
     loadPaperDates,
+    refreshPaperDates,
     paperDateOf,
+    inLib,
     NEW_GROUP,
     loadTask,
     loadMyTasks,
