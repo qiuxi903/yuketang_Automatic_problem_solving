@@ -25,6 +25,23 @@ log = logging.getLogger("agent.worker")
 _ACCOUNT_USE = {}
 _ACCOUNT_LOCK = threading.Lock()
 
+# 多选答案在答案库/校验里用「；」连接多个选项（与 ykt_driver.ANSWER_SEP 一致）
+_ANSWER_SEP = "；"
+
+
+def _picked_texts(options, pick):
+    """把单选索引（int）或多选索引（list[int]）转成命中的选项文本列表。"""
+    picks = list(pick) if isinstance(pick, (list, tuple)) else (
+        [pick] if isinstance(pick, int) and pick >= 0 else [])
+    return [options[j] for j in picks if isinstance(j, int) and 0 <= j < len(options)]
+
+
+def _pick_count(pick):
+    """一道题预期勾选的选项数（用于与页面已勾选数核对）。"""
+    if isinstance(pick, (list, tuple)):
+        return len([x for x in pick if isinstance(x, int) and x >= 0])
+    return 1 if isinstance(pick, int) and pick >= 0 else 0
+
 
 def claim_account(account, task_id, worker_name, force=False):
     """登记账号占用。返回 (False, 占用者信息) 表示已被其它任务占用。
@@ -561,6 +578,14 @@ class Worker:
             idx = built.get("idx", [])
             if built.get("lowConfidence"):
                 log.warning("[%s] %s 低置信题 %d 道", self.name, name, len(built["lowConfidence"]))
+            # 新题型（填空/简答等无选项题）：如实告知用户，自动跳过不点选
+            noopts = built.get("noOptions") or []
+            if noopts:
+                qs = "、".join(str(x.get("q")) for x in noopts[:12])
+                more = " 等" if len(noopts) > 12 else ""
+                self.backend.post_progress(
+                    task_id, name, exam_id,
+                    message=f"第 {qs}{more} 题没有选项（填空/主观题等新题型），本平台暂不支持自动作答，已跳过")
 
             self._stage(task_id, f"{name}：兜底补答")
             self._fill_by_fallback(batch, name, questions, idx)
@@ -579,12 +604,17 @@ class Worker:
 
             driver.click_answers(idx, on_progress=_report)
             self._push_frame(driver, task_id, force=True)
-            selected = [questions[i]["options"][idx[i]]
-                        for i in range(min(len(questions), len(idx))) if idx[i] >= 0]
+            # idx 每项是 int（单选）或 list[int]（多选）；拼出已选选项文本供校验
+            selected = []
+            for i in range(min(len(questions), len(idx))):
+                texts = _picked_texts(questions[i].get("options", []), idx[i])
+                if texts:
+                    selected.append("；".join(texts))
             checked = driver.checked_count()
-            if checked < len([x for x in idx if x >= 0]):
+            expected_checked = sum(_pick_count(x) for x in idx)
+            if checked < expected_checked:
                 log.warning("[%s] %s 已勾选 %d < 预期 %d，重试点击",
-                            self.name, name, checked, len(selected))
+                            self.name, name, checked, expected_checked)
                 driver.click_answers(idx)
                 self._push_frame(driver, task_id, force=True)
 
@@ -710,7 +740,7 @@ class Worker:
 
     def _fill_by_fallback(self, batch, name, questions, idx):
         """本地答案库未命中的题目，调后端配置的兜底 API 补答案，就地回填 idx。"""
-        missing = [i for i, j in enumerate(idx) if j is None or j < 0]
+        missing = [i for i, j in enumerate(idx) if not _pick_count(j)]
         if not missing:
             return
         payload = [{"seq": i + 1, "stem": questions[i].get("stem", ""),
@@ -728,13 +758,24 @@ class Worker:
             if not seq or not (1 <= seq <= len(idx)) or not text:
                 continue
             i = seq - 1
-            try:
-                res = self.matcher.match(questions[i].get("options", []), text)
-            except Exception:
+            opts = questions[i].get("options", [])
+            if not opts:
                 continue
-            if res.get("index", -1) >= 0:
-                idx[i] = res["index"]
-                filled += 1
+            # 兜底答案可能是「A；B」多选形式：拆分逐个定位，全部命中才算补上
+            picks = []
+            for part in [p.strip() for p in text.split(_ANSWER_SEP) if p.strip()]:
+                try:
+                    res = self.matcher.match(opts, part)
+                except Exception:
+                    break
+                if res.get("index", -1) < 0:
+                    picks = []
+                    break
+                picks.append(res["index"])
+            if not picks:
+                continue
+            idx[i] = picks[0] if len(picks) == 1 else picks
+            filled += 1
         log.info("[%s] %s 兜底补答 %d/%d 道", self.name, name, filled, len(missing))
 
     def _collect(self, driver, task_id, batch, name, exam_id):

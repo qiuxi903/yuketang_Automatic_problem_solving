@@ -69,18 +69,33 @@ def match(req: MatchRequest):
 
 @app.post("/idx")
 def build_idx(req: IdxRequest):
-    """按答案库为整卷生成选项索引，供 agent 直接点击。"""
+    """按答案库为整卷生成选项索引，供 agent 直接点击。
+
+    idx 每一项：int（单选，负数=未匹配/无选项）或 list[int]（多选，全部命中才给列表）。
+    noOptions 单列无选项题（填空/简答等新题型），agent 会如实播报并跳过。
+    """
     answers = core.load_paper(req.batch, req.paper)
     if answers is None:
         return {"error": "NO_ANSWER_FILE"}
-    idx, low = [], []
+    idx, low, noopts = [], [], []
     for i, q in enumerate(req.questions):
         expected = answers[i][1] if i < len(answers) else None
-        j, s = core.match_index(q.get("options", []), expected)
-        idx.append(j)
-        if j < 0 or s < 0.80:
+        opts = q.get("options") or []
+        if not opts:
+            idx.append(-1)
+            noopts.append({"q": i + 1, "stem": (q.get("stem") or "")[:60]})
+            continue
+        hits, s = core.match_multi(opts, expected or "")
+        if len(hits) == 1:
+            idx.append(hits[0])
+        elif len(hits) > 1 and all(h >= 0 for h in hits):
+            idx.append(hits)
+        else:
+            idx.append(-1)
+        if not hits or (isinstance(idx[-1], int) and idx[-1] < 0) or s < 0.80:
             low.append({"q": i + 1, "score": round(s, 3), "expected": expected})
-    return {"batch": req.batch, "paper": req.paper, "idx": idx, "lowConfidence": low}
+    return {"batch": req.batch, "paper": req.paper,
+            "idx": idx, "lowConfidence": low, "noOptions": noopts}
 
 
 @app.post("/verify")

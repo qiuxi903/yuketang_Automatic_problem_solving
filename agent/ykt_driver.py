@@ -22,15 +22,18 @@ from playwright.sync_api import sync_playwright
 
 import config
 
-# —— 页面选择器（2026-10-05 真机校准）——
+# —— 页面选择器（2026-10-05 真机校准；2026-10-28 兼容多选题 checkbox）——
 QUESTION_BLOCK = ".item-body"                  # 答题页题目块
 STEM = "h4.exam-font"                          # 题干
-OPTION = "label.el-radio"                      # 选项
+OPTION = "label.el-radio, label.el-checkbox"   # 选项（单选 radio / 多选 checkbox）
 OPTION_TEXT = ".radioText"                     # 选项文字
-OPTION_CHECKED = "label.el-radio.is-checked"   # 已勾选
+OPTION_CHECKED = "label.el-radio.is-checked, label.el-checkbox.is-checked"  # 已勾选
 RESULT_BLOCK = ".item-body"                    # 结果页题目块
 RESULT_STEM = "h4.exam-font"                   # 结果页题干
 RESULT_CORRECT = ".dot-success"                # 结果页正确项标记
+
+# 多选题多个正确项在答案库里用全角分号连接（如 "A；B"），与选项文本不会撞车
+ANSWER_SEP = "；"
 
 PAPER_CARD = "div.activity-box"                # 学习日志试卷卡片
 COURSE_CARD = ".lesson-cardS"                  # 「我听的课」课程卡
@@ -632,41 +635,53 @@ class Driver:
         return False
 
     def scrape_questions(self):
-        """抓取题目：返回 [{stem, options:[文本]}]。"""
+        """抓取题目：返回 [{stem, options:[文本], type}]，按页面题块顺序，与答案库题号一一对应。
+
+        2026-10-28 起不再过滤无选项的题块：填空/简答等新题型也要占一个题号，
+        否则它之后的题会与答案库序号错位（点错选项比漏答严重得多）。
+        无选项题 options=[]，后续匹配会给 -1 自动跳过。
+        type：single（radio）/ multi（checkbox，多选题）。
+        """
         js = """
         () => {
           const blocks = [...document.querySelectorAll('.item-body')];
           return blocks.map(b => {
             const stemEl = b.querySelector('h4.exam-font') || b.querySelector('h4, .stem, .title');
             const stem = (stemEl ? stemEl.innerText : (b.innerText || '')).trim();
-            const opts = [...b.querySelectorAll('label.el-radio')].map(l => {
+            const opts = [...b.querySelectorAll('label.el-radio, label.el-checkbox')].map(l => {
               const t = l.querySelector('.radioText');
               return ((t ? t.innerText : l.innerText) || '').trim();
             });
-            return {stem, options: opts};
-          }).filter(q => q.options.length > 0);
+            const multi = !!b.querySelector('label.el-checkbox');
+            return {stem, options: opts, type: multi ? 'multi' : 'single'};
+          });
         }
         """
         return self.page.evaluate(js)
 
     def click_answers(self, idx_list, batch=8, on_progress=None):
-        """按题目顺序点击选项索引；每 batch 题做一次停顿。
+        """按题目顺序点击选项；每 batch 题做一次停顿。
 
-        索引来自 matcher 的文本匹配结果，绝不按页面顺序猜字母。
+        idx_list 的每一项来自 matcher 的文本匹配结果，绝不按页面顺序猜字母：
+        - int：单选题的选项索引（负数/None = 该题无选项或未匹配，跳过）；
+        - list[int]：多选题命中的多个选项索引，逐个点击。
         on_progress(i)：每处理完第 i 题（0 基）回调一次，供 worker 实时回报题号进度。
         """
         blocks = self.page.locator(QUESTION_BLOCK)
         total = blocks.count()
         clicked = 0
         for i in range(min(total, len(idx_list))):
-            j = idx_list[i]
-            if j is not None and j >= 0:
+            pick = idx_list[i]
+            picks = list(pick) if isinstance(pick, (list, tuple)) else (
+                [pick] if isinstance(pick, int) and pick >= 0 else [])
+            if picks:
                 block = blocks.nth(i)
                 block.scroll_into_view_if_needed()
                 opts = block.locator(OPTION)
-                if j < opts.count():
-                    opts.nth(j).click()
-                    clicked += 1
+                for j in picks:
+                    if 0 <= j < opts.count():
+                        opts.nth(j).click()
+                        clicked += 1
             if on_progress is not None:
                 try:
                     on_progress(i)
@@ -729,6 +744,8 @@ class Driver:
 
     RESULT_SCRAPE_JS = r"""
     () => {
+      // 多选题一题有多个 .dot-success：同一题块内的正确项用「；」连接成一个答案
+      const SEP = '；';
       // 策略 A：标准题块 .item-body
       let blocks = [...document.querySelectorAll('.item-body')];
       let mode = 'A(.item-body)';
@@ -743,23 +760,28 @@ class Driver:
       const push = (stem, answer) => rows.push({seq: rows.length + 1,
         stem: (stem || '').replace(/\s+/g, ' ').trim(),
         answer: (answer || '').replace(/\s+/g, ' ').trim()});
+      const collectMarks = (b) => {
+        const oks = [...b.querySelectorAll('.dot-success, [class*="dot-success"]')];
+        const parts = [];
+        for (const ok of oks) {
+          const row = ok.closest('label') || ok.parentElement;
+          const t = row ? (row.querySelector('.radioText') || row) : null;
+          const txt = ((t ? t.innerText : '') || '').trim();
+          if (txt) parts.push(txt);
+        }
+        return parts.join(SEP);
+      };
       if (blocks.length) {
         for (const b of blocks) {
           const stemEl = b.querySelector('h4.exam-font, [class*="stem"], h3, h4') || b;
           const stem = stemEl.innerText || '';
-          const ok = b.querySelector('.dot-success, [class*="dot-success"]');
-          let answer = '';
-          if (ok) {
-            const row = ok.closest('label') || ok.parentElement;
-            const t = row ? (row.querySelector('.radioText') || row) : null;
-            answer = (t ? t.innerText : '') || '';
-          }
-          push(stem, answer);
+          push(stem, collectMarks(b));
         }
         return {mode, count: rows.length, rows};
       }
-      // 策略 C：整页找正确标记，向上爬到题块
+      // 策略 C：整页找正确标记，按爬到的题块分组（同一题块的多个正确项合成一条）
       const marks = [...document.querySelectorAll('.dot-success, [class*="dot-success"]')];
+      const byBlock = new Map();
       for (const m of marks) {
         let box = m;
         for (let up = 0; up < 8 && box; up++) {
@@ -768,10 +790,17 @@ class Driver:
         }
         const row = m.closest('label') || m.parentElement;
         const t = row ? (row.querySelector('.radioText') || row) : null;
-        const answer = (t ? t.innerText : '') || '';
-        const stem = box ? (box.innerText || '').split('\n').slice(0, 3).join(' ') : '';
-        push(stem, answer);
+        const answer = ((t ? t.innerText : '') || '').trim();
+        if (!answer) continue;
+        const key = box || document.body;
+        if (!byBlock.has(key)) {
+          const stem = (key && key !== document.body)
+            ? (key.innerText || '').split('\n').slice(0, 3).join(' ') : '';
+          byBlock.set(key, {stem, parts: []});
+        }
+        byBlock.get(key).parts.push(answer);
       }
+      for (const {stem, parts} of byBlock.values()) push(stem, parts.join(SEP));
       return {mode: 'C(全局正确标记)', count: rows.length, rows};
     }
     """

@@ -125,7 +125,7 @@ def backend_ready() -> bool:
     用 POST 探测 /api/auth/login（该接口只收 POST），避免每次启动都在后端日志里
     留一条 GET-not-supported 的 WARN。"""
     try:
-        conn = HTTPConnection("127.0.0.1", 8080, timeout=1)
+        conn = HTTPConnection("127.0.0.1", 28080, timeout=1)
         conn.request("POST", "/api/auth/login", body="{}",
                      headers={"Content-Type": "application/json"})
         conn.getresponse().read()
@@ -292,7 +292,7 @@ queue_log = queue.Queue()
 
 def build_matcher(svc):
     return (
-        [resolve_python(), "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8100"],
+        [resolve_python(), "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "28100"],
         ROOT / "matcher",
         None,
     )
@@ -300,7 +300,7 @@ def build_matcher(svc):
 
 def build_collector(svc):
     return (
-        [resolve_python(), "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8200"],
+        [resolve_python(), "-m", "uvicorn", "app:app", "--host", "0.0.0.0", "--port", "28200"],
         ROOT / "collector",
         None,
     )
@@ -352,7 +352,7 @@ def build_backend(svc):
         svc.log("warn", f"当前 java 版本低于 21（{java}），后端可能无法启动；建议安装 Zulu 21 并设置 JAVA_HOME")
     svc.log("info", f"使用 {java}")
     return (
-        [java, "-jar", str(jar)],
+        [java, "-jar", str(jar), "--server.port=28080"],
         ROOT / "backend",
         None,
     )
@@ -364,14 +364,14 @@ SKIP_START = object()  # builder 返回值：服务已在运行/无需启动，s
 def resolve_frontend_port(svc):
     """为前端选端口：优先 5173；被系统保留（bind EACCES）则依次向后找可用端口。
     返回 (port, already_running)。"""
-    for port in range(5173, 5193):
+    for port in range(25173, 25193):
         if port_open(port):
             svc.port = port
             return port, True  # 已有前端在跑（可能是上次启动留下的）
         if bind_ok(port):
             svc.port = port
-            if port != 5173:
-                svc.log("warn", f"端口 5173 被系统保留（Hyper-V/WSL 动态端口），前端改用 {port}")
+            if port != 25173:
+                svc.log("warn", f"端口 25173 被系统保留（Hyper-V/WSL 动态端口），前端改用 {port}")
             return port, False
     return None, False
 
@@ -403,7 +403,7 @@ def build_frontend(svc):
         svc.status = "已在运行"
         return SKIP_START
     if port is None:
-        svc.log("danger", "5173-5192 端口均不可用，前端无法启动")
+        svc.log("danger", "25173-25192 端口均不可用，前端无法启动")
         svc.status = "启动失败"
         return None
     node = shutil.which("node") or "node"
@@ -417,10 +417,10 @@ def build_agent(svc):
 
 
 SERVICES = [
-    Service("matcher", "Matcher · 匹配服务", 8100, build_matcher),
-    Service("collector", "Collector · 采集服务", 8200, build_collector),
-    Service("backend", "Backend · 后端 (Spring Boot)", 8080, build_backend),
-    Service("frontend", "Frontend · 前端 (Vite)", 5173, build_frontend),
+    Service("matcher", "Matcher · 匹配服务", 28100, build_matcher),
+    Service("collector", "Collector · 采集服务", 28200, build_collector),
+    Service("backend", "Backend · 后端 (Spring Boot)", 28080, build_backend),
+    Service("frontend", "Frontend · 前端 (Vite)", 25173, build_frontend),
     Service("agent", "Agent · 做题执行器", None, build_agent),
 ]
 
@@ -692,12 +692,12 @@ class App:
 
     def open_ui(self):
         frontend = next(s for s in SERVICES if s.key == "frontend")
-        webbrowser.open(f"http://localhost:{frontend.port or 5173}")
+        webbrowser.open(f"http://localhost:{frontend.port or 25173}")
 
     def _auto_open_when_ready(self):
         # 后端与前端都真正可用才打开浏览器，避免打开后页面连不上后端
         frontend = next(s for s in SERVICES if s.key == "frontend")
-        port = frontend.port or 5173
+        port = frontend.port or 25173
         for _ in range(360):
             if backend_ready() and port_open(port):
                 if not self._opened_browser:
@@ -781,7 +781,7 @@ class App:
             self.cards[svc.key].refresh()
         running = sum(1 for s in SERVICES if s.alive())
         frontend = next(s for s in SERVICES if s.key == "frontend")
-        url = f"http://localhost:{frontend.port or 5173}"
+        url = f"http://localhost:{frontend.port or 25173}"
         if running == 0:
             self.status_var.set("未启动任何服务 · 点「一键启动」或单个卡片「启动」")
         else:

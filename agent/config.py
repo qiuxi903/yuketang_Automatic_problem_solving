@@ -2,9 +2,9 @@
 
 import os
 
-BACKEND_BASE = os.environ.get("BACKEND_BASE", "http://localhost:8080")
-MATCHER_BASE = os.environ.get("MATCHER_BASE", "http://localhost:8100")
-COLLECTOR_BASE = os.environ.get("COLLECTOR_BASE", "http://localhost:8200")
+BACKEND_BASE = os.environ.get("BACKEND_BASE", "http://localhost:28080")
+MATCHER_BASE = os.environ.get("MATCHER_BASE", "http://localhost:28100")
+COLLECTOR_BASE = os.environ.get("COLLECTOR_BASE", "http://localhost:28200")
 
 HEADLESS = os.environ.get("AGENT_HEADLESS", "1") not in ("0", "false", "False")
 SLOW_MO = int(os.environ.get("AGENT_SLOW_MO", "0"))

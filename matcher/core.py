@@ -64,6 +64,7 @@ def match_index(options, answer: str):
     """在选项文本中定位答案，返回 (索引, 得分)。找不到返回 (-1, 0.0)。"""
     if answer is None:
         return -1, 0.0
+    answer = str(answer)
     ne = norm(answer)
     necs = norm_cs(answer)
     se = sign_of(answer)
@@ -99,6 +100,34 @@ def match_index(options, answer: str):
     if s >= 0.80:
         return j, s
     return -1, s
+
+
+def split_multi(answer: str):
+    """把多选答案拆成单选项文本列表："A；B" → ["A", "B"]。单选答案原样单元素返回。"""
+    if not answer:
+        return []
+    return [p for p in (s.strip() for s in re.split(r"\s*[;；]\s*", str(answer))) if p]
+
+
+def match_multi(options, answer: str):
+    """单选/多选统一入口：答案按「；」拆分逐个定位选项。
+
+    返回 (indices, score)：
+    - 单选（或只有一部分命中）→ indices 是单元素列表，语义同 match_index；
+    - 多选 → indices 是命中的多个索引；任一部分未命中 → 该部分为 -1（整题视为未匹配）；
+    - answer 为空 / 无选项 → ([], 0.0)，调用方按未匹配处理。
+    """
+    if not options or not answer:
+        return [], 0.0
+    parts = split_multi(answer)
+    if not parts:
+        return [], 0.0
+    idxs, scores = [], []
+    for part in parts:
+        j, s = match_index(options, part)
+        idxs.append(j)
+        scores.append(s)
+    return idxs, min(scores)
 
 
 def _paper_path(batch: str, name: str) -> str:

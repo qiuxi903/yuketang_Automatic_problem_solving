@@ -25,7 +25,7 @@ services:
   matcher:
     build: ./matcher
     ports:
-      - "8100:8100"
+      - "28100:8100"
     environment:
       ANSWER_LIB_DIR: /app/answer-lib
     volumes:
@@ -34,7 +34,7 @@ services:
   collector:
     build: ./collector
     ports:
-      - "8200:8200"
+      - "28200:8200"
     environment:
       ANSWER_LIB_DIR: /app/answer-lib
     volumes:
@@ -43,7 +43,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8080:8080"
+      - "28080:28080"
     environment:
       SPRING_PROFILES_ACTIVE: mysql
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ykt?useUnicode=true&characterEncoding=utf8mb4
@@ -60,7 +60,7 @@ services:
   agent:
     build: ./agent
     environment:
-      BACKEND_BASE: http://backend:8080
+      BACKEND_BASE: http://backend:28080
       MATCHER_BASE: http://matcher:8100
       COLLECTOR_BASE: http://collector:8200
       AGENT_COURSE: ""

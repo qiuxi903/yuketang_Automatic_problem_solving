@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: 28080
   error:
     # 业务异常（ResponseStatusException）的 reason 需随响应体回传前端，否则前端只能提示「Request failed with status code 4xx」
     include-message: always
