@@ -341,18 +341,19 @@ class Driver:
             self.course_url = None
         return picked
 
-    def back_to_paper_list(self):
+    def back_to_paper_list(self, want_name=None, on_tick=None):
         """回到课程学习日志（试卷卡片列表）。
 
         做完一卷交卷后浏览器停在结果页，学习日志里根本没有下一卷的名字；
         必须先回到这里，open_paper 才能按名字点到试卷卡片。
+        want_name：下一卷的名字——滚动展开时一旦看到它就停，省掉整页懒加载的等待。
         """
         if self.course_url:
             try:
                 self.page.goto(self.course_url, wait_until="domcontentloaded")
-                self.page.wait_for_timeout(1500)
+                self.page.wait_for_timeout(1200)
                 self.dismiss_popups()
-                self._expand_log()
+                self._expand_log(want_name=want_name, on_tick=on_tick)
                 return True
             except Exception:
                 pass
@@ -360,17 +361,18 @@ class Driver:
         self.open_course(self.course_name)
         return True
 
-    def _expand_log(self):
+    def _expand_log(self, want_name=None, on_tick=None):
         """学习日志是「内层滚动容器」懒渲染：滚到底才会加载后续日期分组的试卷。
 
         页面本身不滚动（scrollHeight == clientHeight），真正的滚动容器是 .viewContainer。
         若不滚动，只会扫到首屏那一批（用户反馈「扫描不全，我全都做完了」）。
+        want_name：目标试卷名——已出现即停止滚动（多卷连做时不必等整页加载完）。
         """
         try:
             self.page.wait_for_selector("div.activity-box", timeout=8000)
         except Exception:
             return
-        self.page.wait_for_timeout(800)
+        self.page.wait_for_timeout(500)
 
         js_scroll = """
         () => {
@@ -389,13 +391,28 @@ class Driver:
                          .map(h => (h.innerText || '').replace(/\\s+/g, ' ').trim())
                          .filter(Boolean)).size
         """
+        js_has = """
+        (name) => [...document.querySelectorAll('div.activity-box .activity-info h2')]
+                    .some(h => ((h.innerText || '').replace(/\\s+/g, ' ')).includes(name))
+        """
         last, stable = -1, 0
         for _ in range(40):
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
+            if want_name:
+                try:
+                    if self.page.evaluate(js_has, want_name):
+                        return  # 目标卷已出现，不必再滚
+                except Exception:
+                    pass
             try:
                 self.page.evaluate(js_scroll)
             except Exception:
                 break
-            self.page.wait_for_timeout(700)
+            self.page.wait_for_timeout(400)
             try:
                 now = self.page.evaluate(js_count)
             except Exception:
@@ -465,7 +482,7 @@ class Driver:
         except Exception:
             return []
 
-    def open_paper(self, name):
+    def open_paper(self, name, on_tick=None):
         """在学习日志点开指定试卷，等待跳转，返回 (courseId, examId)。
 
         当前页面找不到该试卷（典型：上一卷交卷后停在结果页）时，
@@ -475,22 +492,31 @@ class Driver:
         try:
             self.page.get_by_text(name, exact=False).first.click(timeout=6000)
         except Exception:
-            self.back_to_paper_list()
+            self.back_to_paper_list(want_name=name, on_tick=on_tick)
             self.page.get_by_text(name, exact=False).first.click(timeout=6000)
         try:
-            self.page.wait_for_url(lambda u: u != before, timeout=10000)
+            self.page.wait_for_url(lambda u: u != before, timeout=8000)
         except Exception:
             pass
-        self.page.wait_for_timeout(2000)
+        self.page.wait_for_timeout(900)
         m = re.search(r"/exam/(\d+)/(\d+)", self.page.url)
         return (m.group(1), m.group(2)) if m else (None, None)
 
     # —— 答题 ——
 
-    def open_exam(self, course_id, exam_id):
-        """直接走考试详情页路由（备用入口）。"""
+    def open_exam(self, course_id, exam_id, on_tick=None):
+        """直接走考试详情页路由（备用入口）。自适应等待：详情页按钮一出现就返回。"""
         self.page.goto(EXAM_DETAIL.format(c=course_id, e=exam_id), wait_until="domcontentloaded")
-        self.page.wait_for_timeout(2500)
+        deadline = time.time() + 3
+        while time.time() < deadline:
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
+            if self.exam_entry_state() != "unknown":
+                return
+            self.page.wait_for_timeout(250)
 
     # —— 结果页只读（已交卷试卷取答案，绝不进入答题/交卷）——
 
@@ -506,7 +532,7 @@ class Driver:
         except Exception:
             return False
 
-    def open_result(self, exam_id):
+    def open_result(self, exam_id, on_tick=None):
         """直接打开结果页读取正确答案，不进入答题、不交卷，返回是否就绪。
 
         已交卷的试卷其正确项（.dot-success）只有在结果页才可见，
@@ -518,17 +544,17 @@ class Driver:
             self.page.goto(RESULT_PAGE.format(e=exam_id), wait_until="domcontentloaded")
         except Exception:
             return False
-        self.page.wait_for_timeout(2500)
-        if self._wait_result_ready():
+        self.page.wait_for_timeout(900)
+        if self._wait_result_ready(on_tick=on_tick):
             return True
         # 落在封面页（考试须知/查看试卷/再次作答）→ 点「查看试卷」进结果页
         if self._on_cover_page():
             log.info("[driver] 结果页跳转到了封面页，点「查看试卷」进入答案页")
-            if self.open_result_from_detail():
+            if self.open_result_from_detail(on_tick=on_tick):
                 return True
         return False
 
-    def open_result_from_detail(self):
+    def open_result_from_detail(self, on_tick=None):
         """在考试详情页/封面页点「查看试卷」进入结果页（新标签页），返回是否就绪。
 
         作为 open_result 直连路由的兜底：部分账号/试卷仅能从详情页按钮进入结果页。
@@ -548,9 +574,9 @@ class Driver:
                 target.wait_for_load_state("domcontentloaded")
             except Exception:
                 pass
-            target.wait_for_timeout(2500)
+            target.wait_for_timeout(900)
             self.page = target
-            return self._wait_result_ready()
+            return self._wait_result_ready(on_tick=on_tick)
         return False
 
     def exam_score_on_page(self):
@@ -594,8 +620,11 @@ class Driver:
             pass
         return "unknown"
 
-    def enter_exam(self):
-        """在考试详情页点「开始答题 / 再次答题」，并在提示页点「开始」，进入答题页。"""
+    def enter_exam(self, on_tick=None):
+        """在考试详情页点「开始答题 / 再次答题」，并在提示页点「开始」，进入答题页。
+
+        不再用固定 2.5s+3s 死等：点完直接轮询题目块是否出现（出现即返回）。
+        """
         page = self.page
         for text in PAPER_ENTRY_TEXTS:
             try:
@@ -612,26 +641,43 @@ class Driver:
                 target.wait_for_load_state("domcontentloaded")
             except Exception:
                 pass
-            target.wait_for_timeout(2500)
+            self.page = target
             # 考前提示页：点「开始」开始计时并进入答题页
             try:
                 start = target.get_by_text("开始", exact=True).last
                 if start.count():
                     start.click(timeout=5000)
-                    target.wait_for_timeout(3000)
             except Exception:
                 pass
-            self.page = target
+            # 等题目块出现（最多 10s），期间持续回调推帧
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                if on_tick is not None:
+                    try:
+                        on_tick()
+                    except Exception:
+                        pass
+                try:
+                    if self.page.locator(QUESTION_BLOCK).count():
+                        return True
+                except Exception:
+                    pass
+                self.page.wait_for_timeout(300)
             return True
         return False
 
-    def wait_exam_ready(self, timeout=30000):
+    def wait_exam_ready(self, timeout=30000, on_tick=None):
         """等待答题页渲染完成（题目块出现）。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
             if self.page.locator(QUESTION_BLOCK).count():
                 return True
-            self.page.wait_for_timeout(1000)
+            self.page.wait_for_timeout(400)
         return False
 
     def scrape_questions(self):
@@ -696,29 +742,54 @@ class Driver:
     def checked_count(self):
         return self.page.locator(OPTION_CHECKED).count()
 
-    def submit(self):
+    def submit(self, on_tick=None):
         """交卷：header 交卷按钮 → 确认弹窗再次点击交卷。
 
         这是唯一会消耗作答次数的动作。采集/复用模式下 submit_forbidden 为 True，
         此处直接抛错，从机制上保证「只获取答案，不交卷」。
+        等待改为自适应：确认弹窗出现即点，跳转结果页即返回（不再固定死等 1.2s+3s）。
         """
         if self.submit_forbidden:
             raise RuntimeError("采集模式禁止交卷：已交卷试卷只读结果页，未交卷试卷需用户自行完成")
         self.page.get_by_text("交卷", exact=True).first.click()
-        self.page.wait_for_timeout(1200)
-        try:
-            self.page.get_by_role("button", name="交卷").last.click(timeout=5000)
-        except Exception:
-            self.page.get_by_text("交卷", exact=True).last.click()
-        self.page.wait_for_timeout(3000)
+        # 等确认弹窗（最多 2s），出现即点
+        deadline = time.time() + 2
+        clicked = False
+        while time.time() < deadline and not clicked:
+            try:
+                btn = self.page.get_by_role("button", name="交卷").last
+                if btn.count():
+                    btn.click(timeout=2000)
+                    clicked = True
+                    break
+            except Exception:
+                pass
+            self.page.wait_for_timeout(200)
+        if not clicked:
+            try:
+                self.page.get_by_text("交卷", exact=True).last.click(timeout=2000)
+            except Exception:
+                pass
+        # 等跳转结果页（最多 8s），期间持续回调推帧
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
+            if "/result/" in (self.page.url or ""):
+                break
+            self.page.wait_for_timeout(300)
+        self.page.wait_for_timeout(400)  # 结果页首屏渲染的短暂缓冲
 
-    def read_score(self):
+    def read_score(self, on_tick=None):
         """读取得分，返回 'X/N' 或 None。交卷后先等结果页出现。"""
         try:
-            self.page.wait_for_url(re.compile(r"/result/"), timeout=10000)
+            self.page.wait_for_url(re.compile(r"/result/"), timeout=6000)
         except Exception:
             pass
-        self._wait_result_ready()
+        self._wait_result_ready(on_tick=on_tick)
         js = """
         () => {
           const t = document.body.innerText || '';
@@ -732,14 +803,19 @@ class Driver:
         except Exception:
             return None
 
-    def _wait_result_ready(self, timeout=15000):
-        """等结果页题目块渲染完成。"""
+    def _wait_result_ready(self, timeout=15000, on_tick=None):
+        """等结果页题目块渲染完成（出现即返回；等待期间回调推帧，预览不卡）。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
             if self.page.locator(RESULT_BLOCK).count():
-                self.page.wait_for_timeout(800)
+                self.page.wait_for_timeout(400)
                 return True
-            self.page.wait_for_timeout(500)
+            self.page.wait_for_timeout(400)
         return False
 
     RESULT_SCRAPE_JS = r"""
@@ -814,17 +890,22 @@ class Driver:
                 out.append(f)
         return out
 
-    def _wait_answer_visible(self, timeout=25000):
-        """等任意 frame 里出现正确答案标记（.dot-success）。"""
+    def _wait_answer_visible(self, timeout=25000, on_tick=None):
+        """等任意 frame 里出现正确答案标记（.dot-success）；等待期间回调推帧。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
+            if on_tick is not None:
+                try:
+                    on_tick()
+                except Exception:
+                    pass
             for f in self._frames():
                 try:
                     if f.locator(".dot-success").count():
                         return True
                 except Exception:
                     pass
-            self.page.wait_for_timeout(600)
+            self.page.wait_for_timeout(400)
         return False
 
     def _scrape_frames(self):
@@ -860,9 +941,9 @@ class Driver:
         except Exception as exc:
             log.warning("[driver] 诊断信息输出失败：%s", exc)
 
-    def collect_correct_answers(self):
+    def collect_correct_answers(self, on_tick=None):
         """从结果页抓取每题正确选项文本（跨 iframe、多策略），返回 [{seq, stem, answer}]。"""
-        if not self._wait_answer_visible(25000):
+        if not self._wait_answer_visible(25000, on_tick=on_tick):
             log.warning("[driver] 等待 25s 仍未出现正确答案标记，执行诊断并多策略抓取")
         info = self._scrape_frames()
         if not info or not info.get("count"):

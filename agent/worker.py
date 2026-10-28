@@ -106,6 +106,24 @@ class Worker:
         """有真实进展（如逐题作答）时刷新活跃时间，心跳据此保持安静。"""
         self._activity_at = time.time()
 
+    def _tick(self, driver, task_id):
+        """长等待期间的心跳回调：推一帧实时画面（按 FRAME_INTERVAL 节流）。
+
+        交卷/等结果页/翻页这些阶段原本不推帧，前端预览会卡住不动；
+        由 driver 的轮询循环每 300-400ms 回调一次，预览就一直是活的。
+        """
+        self._touch()
+        self._push_frame(driver, task_id)
+
+    def _sleep_frames(self, driver, task_id, seconds):
+        """带推帧的等待：替代裸 time.sleep，卷间间隔也不再让预览冻结。"""
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            if self._abort.is_set():
+                raise AbortTask()
+            self._tick(driver, task_id)
+            time.sleep(min(0.4, max(0.05, deadline - time.time())))
+
     def _heartbeat(self, task_id, stop_evt):
         """心跳：①播报长耗时阶段；②轮询任务状态，被暂停/中断时置中止标志。
 
@@ -356,9 +374,12 @@ class Worker:
                     break
                 if i > 0:
                     # 上一卷结束停在结果页：先回学习日志，下一卷的 open_paper 才点得到
+                    # want_name：滚到目标卷出现即停，不必等整页懒加载
                     self._stage(task_id, "返回试卷列表")
                     try:
-                        driver.back_to_paper_list()
+                        driver.back_to_paper_list(
+                            want_name=paper.get("name"),
+                            on_tick=lambda: self._tick(driver, task_id))
                     except Exception as exc:
                         log.warning("[%s] 回学习日志失败：%s", self.name, exc)
                 try:
@@ -511,12 +532,13 @@ class Worker:
         self.backend.post_progress(task_id, name, exam_id,
                                    status="ANSWERING", message="进入 %s" % name)
         self._touch()
+        tick = lambda: self._tick(driver, task_id)
         try:
             cid, eid = paper.get("courseId"), paper.get("examId")
             if cid and eid:
-                driver.open_exam(cid, eid)
+                driver.open_exam(cid, eid, on_tick=tick)
             else:
-                cid, eid = driver.open_paper(name)
+                cid, eid = driver.open_paper(name, on_tick=tick)
             if not eid:
                 raise RuntimeError("未能定位试卷入口：%s" % name)
             exam_id = eid
@@ -543,17 +565,17 @@ class Worker:
                         message="已经做过（雨课堂显示已交卷），不再重复作答；直接采集答案入库")
                     self._stage(task_id, f"{name}：已经做过，采集答案入库", announce=False)
                     try:
-                        ok = driver.open_result(exam_id)
+                        ok = driver.open_result(exam_id, on_tick=tick)
                         if not ok and cid:
                             driver.open_exam(cid, exam_id)
-                            ok = driver.open_result_from_detail()
-                        got = self._collect(driver, task_id, batch, name, exam_id) if ok else 0
+                            ok = driver.open_result_from_detail(on_tick=tick)
+                        got = self._collect(driver, task_id, batch, name, exam_id, on_tick=tick) if ok else 0
                     except (AbortTask, TaskGone):
                         raise
                     except Exception as exc:
                         log.warning("[%s] %s 采集已有答案失败：%s", self.name, name, exc)
                         got = 0
-                    time.sleep(config.PAPER_GAP)
+                    self._sleep_frames(driver, task_id, config.PAPER_GAP)
                     return "fetched" if got else "skipped"
                 # 0 分空白卷且库里也无答案 → 自动「再次答题」重做一遍：
                 # 交卷后的结果页会显示正确答案，采集入库（消耗 1 次作答机会）
@@ -564,9 +586,9 @@ class Worker:
                     message="已交卷但 0 分（空白卷）：自动重做一遍，交卷后即可采集答案入库")
 
             self._stage(task_id, f"{name}：进入答题页")
-            if not driver.enter_exam():
+            if not driver.enter_exam(on_tick=tick):
                 raise RuntimeError("未找到开始答题按钮")
-            if not driver.wait_exam_ready():
+            if not driver.wait_exam_ready(on_tick=tick):
                 raise RuntimeError("答题页未就绪")
             self._push_frame(driver, task_id, force=True)
 
@@ -623,10 +645,10 @@ class Worker:
                 log.warning("[%s] %s 校验差异 %d 处", self.name, name, report["bad"])
 
             self._stage(task_id, f"{name}：交卷中")
-            driver.submit()
+            driver.submit(on_tick=tick)
             self._push_frame(driver, task_id, force=True)
             self._stage(task_id, f"{name}：读取成绩")
-            score = driver.read_score()
+            score = driver.read_score(on_tick=tick)
             self._push_frame(driver, task_id, force=True)
             self.backend.post_progress(task_id, name, exam_id,
                                        seq=len(questions), total=len(questions),
@@ -634,8 +656,8 @@ class Worker:
                                        message="已交卷 %s" % (score or ""))
 
             self._stage(task_id, f"{name}：采集答案入库")
-            self._collect(driver, task_id, batch, name, exam_id)
-            time.sleep(config.PAPER_GAP)
+            self._collect(driver, task_id, batch, name, exam_id, on_tick=tick)
+            self._sleep_frames(driver, task_id, config.PAPER_GAP)
             return True
         except (AbortTask, TaskGone):
             raise  # 暂停/中断/任务删除：不算失败，交由 run_task 收尾
@@ -658,34 +680,35 @@ class Worker:
         self.backend.post_progress(task_id, name, exam_id, status="ANSWERING",
                                    message="读取已交卷结果页 %s" % name)
         self._touch()
+        tick = lambda: self._tick(driver, task_id)
         try:
             if self._abort.is_set():
                 raise AbortTask()
             course_id = paper.get("courseId")
             if not exam_id:
-                course_id, exam_id = driver.open_paper(name)   # 落在考试详情页
+                course_id, exam_id = driver.open_paper(name, on_tick=tick)   # 落在考试详情页
             if not exam_id:
                 raise RuntimeError("未能定位试卷 ID：%s" % name)
 
-            ok = driver.open_result(exam_id)                   # 直连结果页
+            ok = driver.open_result(exam_id, on_tick=tick)     # 直连结果页
             if not ok and course_id:
-                driver.open_exam(course_id, exam_id)           # 兜底：详情页点「查看试卷」
-                ok = driver.open_result_from_detail()
+                driver.open_exam(course_id, exam_id, on_tick=tick)           # 兜底：详情页点「查看试卷」
+                ok = driver.open_result_from_detail(on_tick=tick)
             if not ok:
                 raise RuntimeError("结果页未就绪：%s" % name)
             self._push_frame(driver, task_id, force=True)
 
             self._stage(task_id, f"{name}：读取正确答案")
             try:
-                score = driver.read_score()
+                score = driver.read_score(on_tick=tick)
             except Exception:
                 score = None
             self.backend.post_progress(
                 task_id, name, exam_id, score=score, status="COLLECTED",
                 message="已交卷试卷，只读结果页取到答案（未重做）%s" % ("，得分 " + score if score else ""))
 
-            self._collect(driver, task_id, batch, name, exam_id)
-            time.sleep(config.PAPER_GAP)
+            self._collect(driver, task_id, batch, name, exam_id, on_tick=tick)
+            self._sleep_frames(driver, task_id, config.PAPER_GAP)
             return True
         except (AbortTask, TaskGone):
             raise  # 暂停/中断/任务删除：不算失败
@@ -778,14 +801,14 @@ class Worker:
             filled += 1
         log.info("[%s] %s 兜底补答 %d/%d 道", self.name, name, filled, len(missing))
 
-    def _collect(self, driver, task_id, batch, name, exam_id):
+    def _collect(self, driver, task_id, batch, name, exam_id, on_tick=None):
         """从结果页抓正确答案：回传后端供导出，并写回答案库（供其它账号复用）。
 
         无论作答模式还是采集模式，只要成功抓到答案就落库——
         「第一次作答的时候顺便记录答案」，后续别的账号即可直接复用、不再重复获取。
         """
         try:
-            items = driver.collect_correct_answers()
+            items = driver.collect_correct_answers(on_tick=on_tick)
         except Exception as exc:
             log.warning("[%s] 采集 %s 失败：%s", self.name, name, exc)
             return 0
