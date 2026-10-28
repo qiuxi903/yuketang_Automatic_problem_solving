@@ -567,7 +567,7 @@ class Worker:
                     try:
                         ok = driver.open_result(exam_id, on_tick=tick)
                         if not ok and cid:
-                            driver.open_exam(cid, exam_id)
+                            driver.open_exam(cid, exam_id, on_tick=tick)
                             ok = driver.open_result_from_detail(on_tick=tick)
                         got = self._collect(driver, task_id, batch, name, exam_id, on_tick=tick) if ok else 0
                     except (AbortTask, TaskGone):
