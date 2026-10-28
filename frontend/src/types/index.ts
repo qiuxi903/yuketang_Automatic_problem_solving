@@ -248,14 +248,7 @@ export interface SearchHitItem {
 
 /* —— 管理后台 —— */
 
-export interface InviteItem {
-  code: string
-  used: boolean
-  usedBy: string | null
-  usedAt: string | null
-  disabled: boolean
-  createdAt: string
-}
+/* InviteItem 见 api/admin.ts（含 maxUses/usedCount/uses，仅邀请码页使用） */
 
 export interface AdminBatchBrief {
   batch: string

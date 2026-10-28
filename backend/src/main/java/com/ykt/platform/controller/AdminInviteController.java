@@ -1,5 +1,6 @@
 package com.ykt.platform.controller;
 
+import com.ykt.platform.dto.InviteBatchRequest;
 import com.ykt.platform.dto.InviteCreateRequest;
 import com.ykt.platform.dto.InviteCreateResponse;
 import com.ykt.platform.dto.InviteView;
@@ -36,12 +37,23 @@ public class AdminInviteController {
     @PostMapping
     public InviteCreateResponse generate(@RequestBody InviteCreateRequest request) {
         Long adminId = SecurityUtil.currentUserId();
-        return inviteService.generate(request.count(), adminId);
+        return inviteService.generate(request, adminId);
     }
 
     @PutMapping("/{code}/disable")
     public void disable(@PathVariable String code) {
         inviteService.disable(code);
+    }
+
+    @PutMapping("/{code}/enable")
+    public void enable(@PathVariable String code) {
+        inviteService.enable(code);
+    }
+
+    /** 批量操作：禁用 / 启用 / 删除，一次请求处理多选中的邀请码。 */
+    @PostMapping("/batch")
+    public Map<String, Long> batch(@RequestBody InviteBatchRequest request) {
+        return Map.of("affected", inviteService.batch(request.action(), request.codes()));
     }
 
     @DeleteMapping("/used")

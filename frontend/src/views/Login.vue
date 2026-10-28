@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { Camera, Connection, Monitor, Postcard } from '@element-plus/icons-vue'
+import { getInviteInfo } from '@/api/auth'
 import { useAuthStore } from '@/store/auth'
 
 const route = useRoute()
@@ -54,7 +55,7 @@ const registerRules: FormRules = {
       trigger: 'blur',
     },
   ],
-  inviteCode: [{ required: true, message: '请输入邀请码（向管理员索取）', trigger: 'blur' }],
+  inviteCode: [{ required: true, message: '请输入邀请码（向管理员或邀请人索取）', trigger: 'blur' }],
 }
 
 const steps = [
@@ -62,6 +63,39 @@ const steps = [
   { icon: Connection, title: '实时自动作答', desc: '答案库命中即作答，未命中回退到兜底 API' },
   { icon: Postcard, title: '导出作答结果', desc: '试卷得分与答案记录一键导出，全程可视化' },
 ]
+
+/* —— 邀请链接直达：/login?invite=CODE 自动切注册并填码，同时校验有效性 —— */
+const inviteState = ref<{ ok: boolean; text: string } | null>(null)
+
+watch(
+  () => String(route.query.invite ?? route.query.code ?? '').trim(),
+  async (code) => {
+    if (!code) return
+    form.inviteCode = code
+    mode.value = 'register'
+    inviteState.value = { ok: true, text: '已从邀请链接填入邀请码，正在校验…' }
+    try {
+      const info = await getInviteInfo(code)
+      if (info.valid) {
+        inviteState.value = {
+          ok: true,
+          text: info.maxUses === 0
+            ? '邀请链接有效 · 该码不限邀请人数'
+            : `邀请链接有效 · 该码还可邀请 ${info.remaining} 人`,
+        }
+      } else if (info.disabled) {
+        inviteState.value = { ok: false, text: '该邀请码已被禁用，请联系邀请人换一个' }
+      } else if (info.exhausted) {
+        inviteState.value = { ok: false, text: '该邀请码的邀请名额已用完，请联系邀请人' }
+      } else {
+        inviteState.value = { ok: false, text: '邀请码无效，请核对链接或手动输入' }
+      }
+    } catch {
+      inviteState.value = null
+    }
+  },
+  { immediate: true },
+)
 
 function switchMode(next: 'login' | 'register') {
   mode.value = next
@@ -78,6 +112,8 @@ async function submit() {
       await auth.register(form.username, form.password, form.inviteCode)
       ElMessage.success('注册成功，请登录')
       mode.value = 'login'
+      // 注册完成：邀请码使命达成，清掉地址栏参数，避免刷新又跳回注册
+      if (route.query.invite || route.query.code) router.replace({ name: 'login' })
       return
     }
 
@@ -179,8 +215,16 @@ async function submit() {
           <el-form-item v-if="mode === 'register'" label="邀请码" prop="inviteCode">
             <el-input
               v-model="form.inviteCode"
-              placeholder="向管理员索取"
+              placeholder="向管理员或邀请人索取"
               size="large"
+              @keyup.enter="submit"
+            />
+            <el-alert
+              v-if="inviteState"
+              class="invite-alert"
+              :type="inviteState.ok ? 'success' : 'warning'"
+              :title="inviteState.text"
+              :closable="false"
             />
           </el-form-item>
           <el-button
@@ -375,15 +419,17 @@ async function submit() {
   box-shadow: var(--shadow-xs);
 }
 
+.invite-alert {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .submit {
   width: 100%;
   margin-top: 4px;
 }
 
 @media (max-width: 900px) {
-  .login {
-    grid-template-columns: 1fr;
-  }
   .pitch {
     padding: 32px;
     gap: 20px;
@@ -396,18 +442,79 @@ async function submit() {
   }
 }
 
+/* —— 移动端：品牌头部收窄 + 表单卡片上浮，不再是一小块孤零零的表单 —— */
 @media (max-width: 768px) {
   .login {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow-y: auto;
   }
   .pitch {
+    padding: 26px 20px 54px;
+    gap: 10px;
+    border-radius: 0 0 28px 28px;
+  }
+  .pitch::after {
+    width: 220px;
+    height: 220px;
+    right: -90px;
+    bottom: -120px;
+  }
+  .pitch-mark {
+    width: 42px;
+    height: 42px;
+    border-radius: 13px;
+    font-size: 22px;
+  }
+  .pitch-brand strong {
+    font-size: 18px;
+  }
+  .pitch-brand em {
+    font-size: 12.5px;
+  }
+  .pitch-copy h1 {
+    font-size: 23px;
+    margin: 4px 0 0;
+  }
+  .pitch-copy p,
+  .pitch-steps,
+  .pitch-foot {
     display: none;
   }
+
   .form-side {
-    padding: 24px 16px;
+    padding: 0 16px 40px;
+    place-items: start center;
+    margin-top: -34px;
   }
   .form-card {
-    padding: 20px 16px;
+    max-width: 440px;
+    padding: 26px 20px 30px;
+    gap: 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    box-shadow: var(--shadow-md);
+  }
+  .form-head h2 {
+    font-size: 22px;
+    margin: 6px 0 5px;
+  }
+  .form-head p {
+    font-size: 13.5px;
+    line-height: 1.7;
+  }
+  .mode-switch {
+    padding: 5px;
+  }
+  .mode-switch button {
+    padding: 12px;
+    font-size: 15px;
+  }
+  .submit {
+    height: 48px;
+    font-size: 15.5px;
+    margin-top: 8px;
   }
 }
 </style>

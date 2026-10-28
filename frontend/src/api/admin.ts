@@ -25,6 +25,11 @@ export function getAdminTask(id: number) {
 
 /* —— 邀请码 —— */
 
+export interface InviteUseEntry {
+  username: string
+  usedAt: string
+}
+
 export interface InviteItem {
   code: string
   used: boolean
@@ -32,18 +37,27 @@ export interface InviteItem {
   usedAt: string | null
   disabled: boolean
   createdAt: string
+  /** 允许注册的最大次数；0 = 不限 */
+  maxUses: number
+  usedCount: number
+  uses: InviteUseEntry[]
 }
 
 export function listInvites() {
   return client.get<unknown, InviteItem[]>('/admin/invites')
 }
 
-export function generateInvites(count: number) {
-  return client.post<unknown, { codes: string[] }>('/admin/invites', { count })
+/** maxUses：1 一码一用；0 不限次数；>1 一个码可邀请多人 */
+export function generateInvites(count: number, maxUses = 1) {
+  return client.post<unknown, { codes: string[] }>('/admin/invites', { count, maxUses })
 }
 
 export function disableInvite(code: string) {
   return client.put<unknown, void>(`/admin/invites/${encodeURIComponent(code)}/disable`)
+}
+
+export function enableInvite(code: string) {
+  return client.put<unknown, void>(`/admin/invites/${encodeURIComponent(code)}/enable`)
 }
 
 export function deleteInvite(code: string) {
@@ -52,4 +66,9 @@ export function deleteInvite(code: string) {
 
 export function deleteUsedInvites() {
   return client.delete<unknown, { deleted: number }>('/admin/invites/used')
+}
+
+/** 批量操作：disable / enable / delete，一次请求处理多选中的邀请码。 */
+export function batchInvites(action: 'disable' | 'enable' | 'delete', codes: string[]) {
+  return client.post<unknown, { affected: number }>('/admin/invites/batch', { action, codes })
 }
