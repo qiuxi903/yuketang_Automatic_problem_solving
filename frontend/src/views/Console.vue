@@ -38,13 +38,15 @@ const step = computed(() => {
     case 'FAILED':
     case 'CANCELLED':
       return 4
-    case 'RUNNING':
-    case 'PAUSED':
-      return 3
     case 'WAITING_BATCH':
       return 2 // 扫完码：直接落到「勾选卷子」
+    case 'RUNNING':
+    case 'PAUSED':
+      // 任务一创建后端就置 RUNNING（Agent 正在开浏览器等你扫码），
+      // 此时还没登录 → 仍停在「扫码登录」，别把用户甩到做题页
+      return store.loggedIn ? 3 : 1
     default:
-      return 1
+      return 1 // PENDING / 等待扫码
   }
 })
 
@@ -62,9 +64,11 @@ function gotoStep(n: number) {
   mobilePanel.value = STEPS[n - 1].panel
 }
 
-/** 底部动作条只在「选卷」「做题」两步出现（这两步面板里没有唯一的主按钮） */
+/** 底部动作条：选卷/做题两步给主操作；扫码阶段给「查看二维码」（弹窗关掉后也能随时找回） */
 const showActionBar = computed(
-  () => isMobile.value && (step.value === 2 || step.value === 3),
+  () =>
+    isMobile.value &&
+    (step.value === 2 || step.value === 3 || (step.value === 1 && store.hasTask)),
 )
 
 async function startChecked(mode: TaskMode) {
@@ -165,6 +169,12 @@ onMounted(async () => {
         >
           只取答案
         </el-button>
+      </template>
+
+      <template v-else-if="step === 1">
+        <span class="ab-hint">等待扫码登录雨课堂</span>
+        <el-button type="primary" @click="deckRef?.openQrcode()">查看二维码</el-button>
+        <el-button :loading="store.busy" @click="deckRef?.rescan()">重新获取</el-button>
       </template>
 
       <template v-else>

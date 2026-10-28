@@ -192,7 +192,10 @@ function startChecked(mode: TaskMode) {
   })
 }
 
-defineExpose({ openQrcode: () => (qrVisible.value = true) })
+defineExpose({
+  openQrcode: () => (qrVisible.value = true),
+  rescan,
+})
 </script>
 
 <template>
@@ -361,8 +364,8 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
       </template>
     </div>
 
-    <!-- 扫码弹窗 -->
-    <el-dialog v-model="qrVisible" title="扫码登录雨课堂" width="420px" align-center>
+    <!-- 扫码弹窗：挂到 body，避免手机端面板切换（display:none）时弹窗跟着消失 -->
+    <el-dialog v-model="qrVisible" title="扫码登录雨课堂" width="420px" align-center append-to-body>
       <div class="qr-wrap">
         <div class="qr-box">
           <img v-if="store.session?.qrcode" :src="store.session.qrcode" alt="雨课堂登录二维码" />
