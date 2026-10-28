@@ -118,7 +118,7 @@ cd agent;     python main.py
 
 ```
 ├── PROJECT.md     项目详细细则（架构/模块/流程/数据格式/配置/接口）
-├── answer-lib/    答案库（按日期批次存放的 md 答案文件 + manifest.json）
+├── answer-lib/    答案库（本地数据，不入库：按日期批次存放的 md 答案文件 + manifest.json）
 ├── launcher-rust/ 单窗口启动器（Rust + egui，cargo build 出单文件 exe）
 ├── frontend/      前端 Vue 3 + Vite + Element Plus
 ├── backend/       后端 Spring Boot 3.2（JPA + JWT + WebSocket，H2 文件库）

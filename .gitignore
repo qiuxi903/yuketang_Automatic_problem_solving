@@ -6,6 +6,9 @@ build/
 target/
 *.class
 
+# 答案库：本地采集的真实试卷题目与答案（数据，不入库）
+answer-lib/
+
 # 日志与运行期数据
 logs/
 *.log

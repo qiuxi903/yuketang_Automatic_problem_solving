@@ -114,6 +114,8 @@ Rust（egui）单窗口亮色启动器（Windows 11 Fluent 风格：白卡片大
 
 ## 3. 答案库格式（`answer-lib/`）
 
+> 注意：`answer-lib/` 是本地采集的数据（真实试卷题目与答案），**不入版本库**（.gitignore 已排除）；克隆仓库后目录为空，首次做题采集时会自动创建。
+
 ```
 answer-lib/
 ├── manifest.json          清单：batches[]（批次名、papers[]、generatedAt）
