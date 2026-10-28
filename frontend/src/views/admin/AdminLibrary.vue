@@ -3,9 +3,11 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { getPaperAnswers, listPapers } from '@/api/paper'
+import { useIsMobile } from '@/utils/useMedia'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import type { BatchMeta, PaperAnswers, PaperMeta } from '@/types'
 
+const isMobile = useIsMobile()
 const loading = ref(false)
 const batches = ref<BatchMeta[]>([])
 const activeBatch = ref<string | null>(null)
@@ -77,7 +79,21 @@ onMounted(load)
     </header>
 
     <div class="library-body">
-      <aside class="batch-list card">
+      <!-- 手机：批次横向胶囊条 -->
+      <div v-if="isMobile" class="batch-chips">
+        <button
+          v-for="batch in batches"
+          :key="batch.batch"
+          class="batch-chip"
+          :class="{ 'is-active': batch.batch === activeBatch }"
+          @click="pickBatch(batch)"
+        >
+          {{ batch.batch }}
+          <em>{{ batch.papersCount }} 份</em>
+        </button>
+      </div>
+
+      <aside v-else class="batch-list card">
         <div class="card-head">
           <h3>批次</h3>
         </div>
@@ -109,7 +125,23 @@ onMounted(load)
             style="width: 190px"
           />
         </div>
-        <el-table v-loading="loading" :data="activePapers" stripe empty-text="该批次暂无试卷">
+
+        <!-- 手机：试卷卡片列表 -->
+        <div v-if="isMobile" class="paper-cards" v-loading="loading">
+          <el-empty v-if="!activePapers.length" description="该批次暂无试卷" :image-size="70" />
+          <div v-for="(row, idx) in activePapers" :key="row.name" class="paper-card">
+            <div class="pc-top">
+              <span class="pc-idx mono-sm">{{ idx + 1 }}</span>
+              <span class="pc-name">{{ row.name }}</span>
+            </div>
+            <div class="pc-foot">
+              <span class="pc-meta mono-sm">{{ row.questions }} 题 · 满分 {{ row.score || '—' }}</span>
+              <el-button size="small" link type="primary" @click="openAnswers(row)">查看答案</el-button>
+            </div>
+          </div>
+        </div>
+
+        <el-table v-else v-loading="loading" :data="activePapers" stripe empty-text="该批次暂无试卷">
           <el-table-column type="index" label="#" width="56" />
           <el-table-column prop="name" label="试卷" min-width="220" show-overflow-tooltip />
           <el-table-column label="题目数" width="100">
@@ -181,6 +213,80 @@ onMounted(load)
   grid-template-columns: 240px 1fr;
   gap: 16px;
   align-items: start;
+}
+
+/* —— 手机：批次胶囊条 + 试卷卡片 —— */
+.batch-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.batch-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-600);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.batch-chip em {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--ink-400);
+}
+.batch-chip.is-active {
+  border-color: var(--accent);
+  background: var(--accent-100);
+  color: var(--accent-700);
+}
+.batch-chip.is-active em {
+  color: var(--accent-700);
+}
+
+.paper-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.paper-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.pc-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pc-idx {
+  color: var(--ink-400);
+  font-size: 12px;
+}
+.pc-name {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ink-900);
+  word-break: break-word;
+}
+.pc-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+}
+.pc-meta {
+  font-size: 12px;
+  color: var(--ink-500);
 }
 
 .card {

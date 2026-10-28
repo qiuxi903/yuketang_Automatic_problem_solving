@@ -925,52 +925,64 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
 
 @media (max-width: 768px) {
   .stage-head {
-    padding: 12px 14px;
+    padding: 13px 14px;
     flex-wrap: wrap;
     gap: 8px;
   }
-  .stage-title .eyebrow {
+  /* 移动端减负：标题行隐藏（分段标签已表明当前页），只留状态与视图切换 */
+  .stage-title {
     display: none;
   }
-  .stage-title h3 {
-    font-size: 16px;
+  .stage-head-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .view-switch {
+    margin-left: auto;
   }
   .stage-scroll {
-    padding: 16px 16px 32px;
+    padding: 14px 14px 28px;
     gap: 14px;
   }
   .hero {
     flex-direction: column;
     align-items: stretch;
-    gap: 16px;
+    gap: 18px;
     padding: 20px 18px;
   }
   .hero-paper {
-    font-size: 20px;
+    font-size: 21px;
   }
   .hero-ring {
-    width: 104px;
-    height: 104px;
+    width: 108px;
+    height: 108px;
     align-self: center;
   }
   .hero-action {
     font-size: 13.5px;
-  }
-  .hero-ring {
-    align-self: center;
-  }
-  .hero-action {
     max-width: none;
+    padding: 9px 12px;
+  }
+  .action-text {
+    white-space: normal;
+    line-height: 1.6;
   }
   .mode-note {
     display: none;
   }
+  .q-progress {
+    padding: 14px 16px;
+  }
   .done-card {
     flex-direction: column;
     align-items: stretch;
+    gap: 14px;
   }
   .done-actions {
     flex-direction: row;
+  }
+  .done-actions .el-button {
+    flex: 1;
   }
   .info-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -979,8 +991,25 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
     height: 48vh;
     min-height: 280px;
   }
-  .view-switch {
-    margin-left: auto;
+  .sheet {
+    padding: 16px 14px 20px;
+  }
+  .answer {
+    grid-template-columns: 30px 1fr;
+    padding: 12px 12px;
+  }
+  .stem {
+    font-size: 13.5px;
+  }
+  .opt {
+    font-size: 13px;
+    padding: 6px 10px;
+  }
+  .stage-empty {
+    padding: 32px 16px;
+  }
+  .stage-empty h3 {
+    font-size: 19px;
   }
 }
 </style>

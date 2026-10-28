@@ -97,7 +97,10 @@ onMounted(async () => {
         :class="{ 'is-hidden-mobile': mobilePanel !== 'papers' }"
         @select="(p) => { selectPaper(p); mobilePanel = 'answer' }"
       />
-      <ControlDeck :class="{ 'is-hidden-mobile': mobilePanel !== 'control' }" />
+      <ControlDeck
+        :class="{ 'is-hidden-mobile': mobilePanel !== 'control' }"
+        @go-papers="mobilePanel = 'papers'"
+      />
       <AnswerStage
         :selected-paper="selectedPaper"
         :class="{ 'is-hidden-mobile': mobilePanel !== 'answer' }"
@@ -141,27 +144,33 @@ onMounted(async () => {
   .mobile-tabs {
     display: flex;
     gap: 8px;
-    padding: 12px 14px;
+    padding: 10px 14px 12px;
     background: var(--surface);
     border-bottom: 1px solid var(--border);
     flex: none;
   }
   .mobile-tab {
     flex: 1;
-    height: 42px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    height: 48px;
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
     background: var(--surface-2);
     color: var(--ink-500);
     font-family: var(--font-sans);
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
     cursor: pointer;
+    transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  }
+  .mobile-tab:active {
+    transform: scale(0.98);
   }
   .mobile-tab.is-on {
-    background: var(--accent-050);
-    border-color: var(--accent-200);
+    background: var(--accent-100);
+    border-color: var(--accent);
     color: var(--accent-700);
+    box-shadow: var(--shadow-xs);
   }
   .workspace {
     grid-template-columns: 1fr;

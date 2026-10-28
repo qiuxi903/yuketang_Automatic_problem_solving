@@ -4,9 +4,11 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { listUsers, updateUserRole } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
+import { useIsMobile } from '@/utils/useMedia'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import type { AdminUserView, UserRole } from '@/types'
 
+const isMobile = useIsMobile()
 const loading = ref(false)
 const savingId = ref<number | null>(null)
 const rows = ref<AdminUserView[]>([])
@@ -78,7 +80,36 @@ onMounted(load)
     </header>
 
     <section class="card">
-      <el-table v-loading="loading" :data="filtered" stripe empty-text="暂无账号">
+      <!-- 手机：卡片列表 -->
+      <div v-if="isMobile" class="user-cards" v-loading="loading">
+        <el-empty v-if="!filtered.length" description="暂无账号" :image-size="70" />
+        <div v-for="row in filtered" :key="row.id" class="user-card">
+          <div class="uc-top">
+            <span class="uc-name">{{ row.username }}</span>
+            <StatusPill :tone="row.role === 'ADMIN' ? 'accent' : 'neutral'">
+              {{ row.role === 'ADMIN' ? '管理员' : '普通用户' }}
+            </StatusPill>
+          </div>
+          <div class="uc-meta">
+            <span>ID {{ row.id }}</span>
+            <span>任务 {{ row.taskCount }}<template v-if="row.runningCount"> · 进行中 {{ row.runningCount }}</template></span>
+            <span>{{ formatDateTime(row.createdAt) }}</span>
+          </div>
+          <div class="uc-foot">
+            <el-radio-group
+              :model-value="row.role"
+              size="small"
+              :disabled="savingId === row.id"
+              @change="(val: UserRole) => changeRole(row, val)"
+            >
+              <el-radio-button value="USER">普通</el-radio-button>
+              <el-radio-button value="ADMIN">管理员</el-radio-button>
+            </el-radio-group>
+          </div>
+        </div>
+      </div>
+
+      <el-table v-else v-loading="loading" :data="filtered" stripe empty-text="暂无账号">
         <el-table-column prop="id" label="ID" width="72" />
         <el-table-column prop="username" label="用户名" min-width="180" />
         <el-table-column label="角色" width="130">
@@ -161,5 +192,40 @@ onMounted(load)
   margin-left: 6px;
   font-size: 11.5px;
   color: var(--accent-700);
+}
+
+/* —— 手机卡片列表 —— */
+.user-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.user-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+.uc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.uc-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-900);
+}
+.uc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.uc-foot {
+  margin-top: 10px;
 }
 </style>

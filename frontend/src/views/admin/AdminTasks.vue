@@ -4,10 +4,12 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import { getAdminTask, listAllTasks } from '@/api/admin'
 import { formatDateTime } from '@/utils/format'
+import { useIsMobile } from '@/utils/useMedia'
 import { MODE_LABEL, taskMeta } from '@/utils/status'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import type { AdminTaskView, TaskSnapshot, TaskStatus } from '@/types'
 
+const isMobile = useIsMobile()
 const loading = ref(false)
 const rows = ref<AdminTaskView[]>([])
 const keyword = ref('')
@@ -94,7 +96,27 @@ onMounted(load)
     </header>
 
     <section class="card">
+      <!-- 手机：卡片列表（点卡片看详情） -->
+      <div v-if="isMobile" class="task-cards" v-loading="loading">
+        <el-empty v-if="!filtered.length" description="暂无任务" :image-size="70" />
+        <div v-for="row in filtered" :key="row.taskId" class="task-card" @click="openDetail(row)">
+          <div class="tc-top">
+            <span class="tc-id mono-sm">#{{ row.taskId }}</span>
+            <StatusPill :tone="taskMeta(row.status).tone">{{ taskMeta(row.status).label }}</StatusPill>
+          </div>
+          <div class="tc-batch">{{ row.batch || '批次待确认' }}</div>
+          <div class="tc-meta">
+            <span>{{ row.username ?? `用户 ${row.userId}` }}</span>
+            <span>{{ MODE_LABEL[row.mode] ?? row.mode }}</span>
+            <span>进度 {{ progressText(row) }}</span>
+            <span v-if="row.score">得分 {{ row.score }}</span>
+          </div>
+          <div class="tc-foot">{{ formatDateTime(row.createdAt) }}</div>
+        </div>
+      </div>
+
       <el-table
+        v-else
         v-loading="loading"
         :data="filtered"
         stripe
@@ -213,6 +235,52 @@ onMounted(load)
   box-shadow: var(--shadow-xs);
 }
 .muted {
+  color: var(--ink-400);
+}
+
+/* —— 手机卡片列表 —— */
+.task-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.task-card {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  cursor: pointer;
+}
+.tc-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tc-id {
+  font-weight: 700;
+  color: var(--ink-800);
+}
+.tc-batch {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-900);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tc-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.tc-foot {
+  margin-top: 8px;
+  font-size: 11.5px;
   color: var(--ink-400);
 }
 

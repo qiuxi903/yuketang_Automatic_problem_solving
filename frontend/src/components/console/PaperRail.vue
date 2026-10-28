@@ -549,45 +549,83 @@ async function startChecked(mode: TaskMode) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-</style>
 
+/* —— 移动端：放宽间距、加大触控目标（此前这段样式误写在 style 标签外从未生效） —— */
 @media (max-width: 768px) {
   .rail-head {
-    padding: 16px 16px 10px;
+    padding: 16px 16px 12px;
+  }
+  /* 移动端减负：眉标隐藏，标题+计数保留 */
+  .rail-title .eyebrow {
+    display: none;
+  }
+  .rail-title h3 {
+    font-size: 18px;
+  }
+  .rail-meta {
+    padding: 0 16px 12px;
   }
   .pick-bar {
     padding: 10px 14px;
+    gap: 10px;
   }
-  .pick-go {
-    height: 30px;
-    padding: 0 14px;
+  .pick-all {
     font-size: 13px;
   }
-  .date-head {
-    padding: 10px 8px;
-  }
-  .date-text {
-    font-size: 13px;
-  }
-  .paper {
-    padding: 12px 10px;
-    grid-template-columns: 22px 22px 1fr auto;
-  }
-  .check,
   .box {
     width: 20px;
     height: 20px;
+    font-size: 13px;
   }
-  .grid-cols-mobile {
-    grid-template-columns: 22px 22px 1fr auto;
+  .pick-count {
+    font-size: 12.5px;
+  }
+  .pick-go {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 13.5px;
+    border-radius: var(--r-sm);
+  }
+  .rail-body {
+    padding: 10px 12px 16px;
+  }
+  .date-head {
+    padding: 10px 8px;
+    margin-top: 8px;
+  }
+  .date-text {
+    font-size: 13.5px;
+  }
+  .date-head .sub {
+    font-size: 11.5px;
+  }
+  .group-check {
+    width: 24px;
+    height: 24px;
+    font-size: 13px;
+  }
+  .paper {
+    padding: 13px 10px;
+    grid-template-columns: 22px 24px 1fr auto;
+    gap: 10px;
+  }
+  .check {
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
   }
   .paper-name {
-    font-size: 14px;
+    font-size: 14.5px;
   }
   .chip {
     font-size: 11.5px;
+    padding: 1px 8px;
   }
-  .rail-body {
-    padding: 10px 12px;
+  .score {
+    font-size: 14px;
+  }
+  .rail-foot {
+    padding: 12px 16px;
   }
 }
+</style>

@@ -152,7 +152,7 @@ const activeName = computed(() => route.name as string)
     align-items: center;
     border-right: none;
     border-bottom: 1px solid var(--border);
-    padding: 8px 10px;
+    padding: 9px 12px;
     gap: 6px;
     overflow-x: auto;
   }
@@ -166,7 +166,12 @@ const activeName = computed(() => route.name as string)
   }
   .side-link {
     white-space: nowrap;
-    padding: 7px 12px;
+    padding: 10px 14px;
+  }
+  .side-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 15px;
   }
 }
 </style>

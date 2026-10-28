@@ -468,14 +468,26 @@ function handleLogout() {
   .topbar {
     gap: 10px;
     padding: 0 12px;
-    height: 52px;
+    height: 54px;
   }
   .brand-text em,
   .user-chip .caret {
     display: none;
   }
+  .brand-mark {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+  .brand-text strong {
+    font-size: 16.5px;
+  }
   .mytasks span {
     display: none;
+  }
+  .mytasks {
+    height: 38px;
+    padding: 0 10px;
   }
   .conn {
     display: none;
@@ -484,7 +496,11 @@ function handleLogout() {
     display: none;
   }
   .user-chip {
-    padding: 4px 8px 4px 4px;
+    padding: 4px 10px 4px 5px;
+    height: 38px;
+  }
+  .user-name {
+    font-size: 13.5px;
   }
   /* 移动端隐藏角色徽标，顶栏只留头像+用户名 */
   .user-chip :deep(.pill) {
@@ -493,6 +509,10 @@ function handleLogout() {
   .theme-toggle {
     width: 38px;
     height: 38px;
+    font-size: 17px;
+  }
+  .topbar-right {
+    gap: 8px;
   }
   .shell-body {
     padding-bottom: 0;
@@ -500,7 +520,7 @@ function handleLogout() {
   .tabbar {
     display: flex;
     align-items: stretch;
-    height: calc(56px + env(safe-area-inset-bottom));
+    height: calc(60px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
     background: var(--surface);
     border-top: 1px solid var(--border);
@@ -517,18 +537,19 @@ function handleLogout() {
     background: transparent;
     color: var(--ink-400);
     font-family: var(--font-sans);
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
+    transition: color 0.16s ease;
   }
   .tabbar-item .el-icon {
-    font-size: 20px;
+    font-size: 22px;
   }
   .tabbar-item.is-active {
-    color: var(--accent);
+    color: var(--accent-700);
   }
-  .shell-body {
-    padding-bottom: 0;
+  .tabbar-item.is-active .el-icon {
+    color: var(--accent);
   }
 }
 

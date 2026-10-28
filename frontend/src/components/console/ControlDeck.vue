@@ -22,6 +22,9 @@ import { useRouter } from 'vue-router'
 const store = useConsoleStore()
 const router = useRouter()
 
+/** 移动端「去勾选卷子」：请外层把分段视图切到试卷页。 */
+const emit = defineEmits<{ goPapers: [] }>()
+
 /** 答案查询统一入口收敛到「答案中心」页（搜索 / 按批次浏览导出 / 获取记录） */
 function goAnswerCenter() {
   void router.push({ name: 'community' })
@@ -205,8 +208,8 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
       <StatusPill v-else tone="neutral">未开始</StatusPill>
     </div>
 
-    <!-- 状态摘要条：操作与事件已收进「运行日志」抽屉，中栏只保留最近一条 -->
-    <div class="log-bar">
+    <!-- 状态摘要条：无任务时手机上整行隐藏，减少噪音 -->
+    <div class="log-bar" :class="{ 'mobile-hide': !store.hasTask }">
       <div class="log-latest">
         <span class="log-dot" :class="`l-${latest?.level ?? 'info'}`" />
         <div class="log-text">
@@ -230,9 +233,10 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
       <template v-if="!store.hasTask">
         <div class="menu-group">
           <span class="eyebrow">开始做题</span>
-          <p class="hint">
+          <p class="hint hint-long">
             点下面按钮创建任务，然后用手机扫码登录雨课堂。登录后平台会读取你账号里的全部作业，再由你确认用哪个答案库、怎么处理。
           </p>
+          <p class="hint hint-short mobile-only">创建任务后扫码登录，剩下的交给 Agent。</p>
         </div>
         <el-button
           type="primary"
@@ -245,8 +249,8 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
           新建任务，扫码登录雨课堂
         </el-button>
         <!-- 答案查询统一入口：答案中心页（搜索/浏览/导出/获取记录），不再单独弹窗 -->
-        <div class="menu-group">
-          <span class="eyebrow">不动卷子，只想查答案？</span>
+        <div class="menu-group mobile-hide">
+          <span class="eyebrow">不动手做，只想查答案？</span>
           <p class="hint">
             到「答案中心」搜索或按批次浏览全部答案，可直接导出 Markdown。不建任务、不扫码、不消耗作答次数。
           </p>
@@ -259,13 +263,21 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
       <template v-else-if="store.waitingBatch">
         <div class="menu-group">
           <span class="eyebrow">已登录 · 等你勾选</span>
-          <p class="hint">
+          <p class="hint hint-long">
             已登录 <strong>{{ store.session?.yktName || '雨课堂账号' }}</strong
             >，账号作业已列在左侧「试卷清单」。勾选要处理的卷子，然后点下方按钮即可开始。
           </p>
-          <p class="hint">
+          <p class="hint hint-long">
             新卷子（未入答案库）也可以勾选：点「做题」先做一遍，答案会自动采回答案库。
           </p>
+          <p class="hint hint-short mobile-only">
+            已登录 {{ store.session?.yktName || '雨课堂账号' }}。到「试卷」页勾选卷子，回这里点开始。
+          </p>
+          <div class="mobile-only">
+            <el-button class="full" :icon="Select" @click="emit('goPapers')">
+              去「试卷」页勾选卷子
+            </el-button>
+          </div>
         </div>
 
         <div class="menu-group">
@@ -316,7 +328,7 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
           >
             导出任务答案
           </el-button>
-          <el-button class="full" :icon="Collection" @click="goAnswerCenter">
+          <el-button class="full mobile-hide" :icon="Collection" @click="goAnswerCenter">
             前往答案中心
           </el-button>
           <el-button
@@ -344,7 +356,7 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
           <p class="hint">二维码过期时点「重新获取二维码」；会话关闭后需重新扫码。</p>
         </div>
 
-        <button class="ghost-link" type="button" @click="copyToken">复制任务信息（排查用）</button>
+        <button class="ghost-link mobile-hide" type="button" @click="copyToken">复制任务信息（排查用）</button>
       </template>
     </div>
 
@@ -645,24 +657,54 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
   margin: 0;
 }
 
+.hint-short {
+  display: none;
+}
+
 @media (max-width: 768px) {
+  /* 移动端减负：标题行隐藏（分段标签已表明当前页），状态行只留状态点 */
+  .deck-title {
+    display: none;
+  }
+  .hint-long {
+    display: none;
+  }
+  .hint-short {
+    display: block;
+  }
   .deck-head {
-    padding: 16px 16px 12px;
+    padding: 16px 16px 13px;
   }
   .deck-title h3 {
-    font-size: 17px;
+    font-size: 18px;
+    margin-top: 4px;
+  }
+  .log-bar {
+    padding: 12px 14px;
+  }
+  .log-title {
+    font-size: 13.5px;
+  }
+  .log-detail {
+    font-size: 12px;
+  }
+  .log-btn {
+    min-height: 38px;
   }
   .menu {
-    padding: 16px 14px;
-    gap: 12px;
+    padding: 16px 14px 24px;
+    gap: 14px;
   }
-  /* 触控目标加大：手机上按钮统一 44px 高 */
+  .menu-group {
+    gap: 9px;
+  }
+  /* 触控目标加大：手机上按钮统一 46px 高 */
   .menu .el-button {
-    height: 44px;
-    font-size: 14.5px;
+    height: 46px;
+    font-size: 15px;
   }
   .menu .el-button.is-large {
-    height: 48px;
+    height: 50px;
   }
   .hint {
     font-size: 13px;
@@ -671,6 +713,11 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
   }
   .btn-grid {
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .ghost-link {
+    font-size: 13px;
+    padding: 10px 0;
   }
   .batch-row {
     padding: 12px 10px;
@@ -682,8 +729,21 @@ defineExpose({ openQrcode: () => (qrVisible.value = true) })
     font-size: 13px;
     line-height: 1.8;
   }
+  /* 扫码弹窗：二维码放大 + 信息行加高，扫码成功前看得清楚 */
+  .qr-box {
+    width: 232px;
+    height: 232px;
+  }
   .qr-meta {
     width: 100%;
+    gap: 10px;
+  }
+  .qr-row {
+    font-size: 14px;
+  }
+  .qr-tip {
+    font-size: 12.5px;
+    line-height: 1.8;
   }
 }
 
