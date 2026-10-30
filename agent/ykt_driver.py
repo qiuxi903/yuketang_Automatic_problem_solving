@@ -950,13 +950,32 @@ class Driver:
           const txt = optText(row);
           if (txt) parts.push(txt);
         }
-        let answer = parts.join(SEP);
         // 记录正确选项的位置（1 基，多选用逗号）：选项可见文字相同时
         // （如三个「百度」），答案文本无法区分，位置是唯一的消歧线索
-        if (answer && labels.length) {
-          const positions = oks.map(ok => labels.indexOf(ok.closest('label')))
-            .filter(i => i >= 0).map(i => i + 1);
-          if (positions.length) answer += ' ⟦pos:' + positions.join(',') + '⟧';
+        const positions = oks.map(ok => labels.indexOf(ok.closest('label')))
+          .filter(i => i >= 0).map(i => i + 1);
+
+        // 兜底：个别题目没有正确标记（如 1915 第 19 题），但页面文字里
+        // 会显示「正确答案：C」——按字母对应到选项位置取原文
+        if (!parts.length && labels.length) {
+          const m = (b.innerText || '').match(/正确答案\s*[:：]\s*([A-Da-d]+)/);
+          if (m) {
+            const idxs = [...m[1].toUpperCase()]
+              .map(ch => ch.charCodeAt(0) - 65)
+              .filter(i => i >= 0 && i < labels.length);
+            for (const i of idxs) {
+              const txt = optText(labels[i]);
+              if (txt) parts.push(txt);
+            }
+            if (parts.length) {
+              return parts.join(SEP) + ' ⟦pos:' + idxs.map(i => i + 1).join(',') + '⟧';
+            }
+          }
+        }
+
+        let answer = parts.join(SEP);
+        if (answer && positions.length) {
+          answer += ' ⟦pos:' + positions.join(',') + '⟧';
         }
         return answer;
       };
@@ -1058,7 +1077,14 @@ class Driver:
             self._dump_result_diagnostics()
             log.warning("[driver] 多策略抓取仍无答案（诊断见上）")
             return []
-        rows = [r for r in info.get("rows", []) if (r.get("answer") or "").strip()]
+        all_rows = info.get("rows", [])
+        rows = [r for r in all_rows if (r.get("answer") or "").strip()]
+        # 明确列出「有题块但没有答案」的题号：个别题目结果页不显示正确答案，
+        # 这些题无法入库（平台作答时会跳过，不瞎猜）
+        missing = sorted({r.get("seq") for r in all_rows} - {r.get("seq") for r in rows})
+        if missing:
+            log.warning("[driver] 结果页有 %d 题未显示正确答案（题号：%s），本轮无法入库",
+                        len(missing), missing[:15])
         log.info("[driver] 结果页采集：策略 %s，%d 题带答案（frame: %s）",
                  info.get("mode"), len(rows), info.get("frame", "主文档"))
         return rows
