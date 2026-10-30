@@ -179,21 +179,48 @@ class Driver:
 
     # —— 登录 ——
 
+    def _login_page_shown(self):
+        """当前是否停在登录页（未登录的最可靠信号：URL 带 next= 或出现二维码图）。"""
+        try:
+            url = self.page.url or ""
+            if "next=" in url or "/login" in url.lower():
+                return True
+            return self.page.locator("img.logma").count() > 0
+        except Exception:
+            return False
+
+    def _app_shell_shown(self):
+        """当前是否渲染了应用壳（「我听的课/我教的课」导航）。"""
+        try:
+            return bool(self.page.locator("text=我听的课").count()
+                        or self.page.locator("text=我教的课").count())
+        except Exception:
+            return False
+
     def open_and_capture_qr(self):
         """打开入口；未登录时截取二维码，返回 dataURL；已登录返回 None。
 
-        到码即走：登录态标记与二维码图片谁先渲染谁结束（上限 8s），
-        不再盲等固定 2.5 秒——这是二维码「生成慢」的主要来源。
+        注意竞态：清空登录态后，SPA 的应用壳会先闪一下（带「我听的课」导航）
+        再跳登录页——只看一次 DOM 会把「闪出的应用壳」当成已登录，从而跳过扫码
+        （日志表现为「扫码登录成功：None」）。所以登录页信号优先；
+        判定已登录要求应用壳连续稳定存在（≥1.2s 且没有跳登录页）。
         """
         self.page.goto(config.YKT_INDEX, wait_until="domcontentloaded")
-        try:
-            self.page.wait_for_selector(
-                "img.logma, text=我听的课, text=我教的课", timeout=8000)
-        except Exception:
-            pass
-        if self.is_logged_in():
-            return None
-        return self.capture_qrcode()
+        deadline = time.time() + 10
+        logged_seen_at = 0.0
+        while time.time() < deadline:
+            if self._login_page_shown():
+                return self.capture_qrcode()
+            if self._app_shell_shown():
+                if logged_seen_at == 0.0:
+                    logged_seen_at = time.time()
+                elif time.time() - logged_seen_at >= 1.2:
+                    return None  # 应用壳稳定存在且没跳登录页 → 确实已登录
+            else:
+                logged_seen_at = 0.0
+            self.page.wait_for_timeout(300)
+        # 超时：登录页没出现、应用壳也没稳定 → 按未登录处理，截一张兜底图
+        return None if self._app_shell_shown() else self.capture_qrcode()
 
     # 二维码必须是「接近正方形 + 尺寸足够大」的图片，
     # 用来排除 changeImg 之类的小图标（76×72、0×0 等），它们同样命中 img[src*='qr']。
@@ -275,14 +302,11 @@ class Driver:
         return "data:image/png;base64," + base64.b64encode(self.page.screenshot()).decode()
 
     def is_logged_in(self):
-        try:
-            if self.page.locator("text=我听的课").count():
-                return True
-            if self.page.locator("text=我教的课").count():
-                return True
-        except Exception:
-            pass
-        return False
+        """是否已登录：登录页信号优先（URL 带 next= 或出现二维码），
+        否则以应用壳（「我听的课/我教的课」）为准。"""
+        if self._login_page_shown():
+            return False
+        return self._app_shell_shown()
 
     def wait_login(self, timeout=None):
         """等待用户扫码完成。超时抛 LoginRequired。"""
