@@ -88,6 +88,10 @@ def match_index(options, answer: str):
         return -1, 0.0
     positions, body = split_position(str(answer))
     if not body:
+        # 只有位置标记的答案（个别题结果页不显示答案文字，如代码型选项）：
+        # 直接按采集位置作答
+        if positions and 0 < positions[0] <= len(options):
+            return positions[0] - 1, 1.0
         return -1, 0.0
     ne = norm(body)
     necs = norm_cs(body)
