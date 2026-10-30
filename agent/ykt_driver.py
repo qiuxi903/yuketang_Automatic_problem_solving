@@ -55,8 +55,11 @@ class AbortTask(Exception):
 
 
 class Driver:
-    def __init__(self, headless=None):
+    def __init__(self, headless=None, profile=None):
         self.headless = config.HEADLESS if headless is None else headless
+        # 每个执行工人一个持久化浏览器 profile：登录态跨 Agent 重启保留，
+        # 同一雨课堂账号续做时不用重新扫码（切账号仍会清空登录，防串号）
+        self.profile = profile or "default"
         self._pw = None
         self.browser = None
         self.context = None
@@ -67,34 +70,55 @@ class Driver:
         # 采集/复用模式下置 True：任何调用 submit() 都会直接抛错，杜绝重复消耗作答次数
         self.submit_forbidden = False
 
-    def start(self):
-        self._pw = sync_playwright().start()
-        self.browser = self._pw.chromium.launch(
+    def _profile_dir(self):
+        import os
+        here = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(here, "runtime", "profiles", self.profile)
+        os.makedirs(path, exist_ok=True)
+        return path
+
+    def _launch_context(self):
+        """启动持久化上下文（profile 目录保留 Cookie，重启后登录态还在）。"""
+        self.context = self._pw.chromium.launch_persistent_context(
+            user_data_dir=self._profile_dir(),
             headless=self.headless,
             slow_mo=config.SLOW_MO,
             channel=config.BROWSER_CHANNEL or None,
             args=["--disable-blink-features=AutomationControlled"],
+            user_agent=config.USER_AGENT,
+            viewport={"width": 1440, "height": 900},
         )
-        self.context = self.browser.new_context(user_agent=config.USER_AGENT,
-                                                viewport={"width": 1440, "height": 900})
-        self.page = self.context.new_page()
+        self.browser = None  # 持久化上下文没有独立的 browser 对象
+        self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         self.page.set_default_timeout(15000)
 
-    def reset_context(self):
-        """关闭当前上下文并新开一个（清空登录态）。
+    def start(self):
+        self._pw = sync_playwright().start()
+        self._launch_context()
 
-        多账号切换的关键：不同雨课堂账号的任务必须用全新上下文，
+    def reset_context(self):
+        """切换账号：重建上下文并清空登录态（profile 目录本身保留，只是清掉 Cookie/存储）。
+
+        多账号切换的关键：不同雨课堂账号的任务必须清空登录，
         否则浏览器里残留上一个账号的 Cookie，下一个任务会「继承」别人的登录（串号）。
+        同一账号续做不会走这里，所以重启 Agent 后仍能免扫码。
         """
         try:
             if self.context:
                 self.context.close()
         except Exception:
             pass
-        self.context = self.browser.new_context(user_agent=config.USER_AGENT,
-                                                viewport={"width": 1440, "height": 900})
-        self.page = self.context.new_page()
-        self.page.set_default_timeout(15000)
+        self._launch_context()
+        try:
+            self.context.clear_cookies()
+        except Exception:
+            pass
+        try:
+            self.page.goto(config.YKT_INDEX, wait_until="domcontentloaded")
+            self.page.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }")
+            self.context.clear_cookies()
+        except Exception:
+            pass
         self.course_name = None
         self.course_url = None
 

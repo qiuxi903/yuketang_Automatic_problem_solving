@@ -501,8 +501,19 @@ export const useConsoleStore = defineStore('console', () => {
           .map((it) => it.paper),
       )]
       if (t0 && t0.items.length && !remaining.length) {
-        ElMessage.info('当前批次的卷子都已处理完成，没有需要继续的卷子')
-        return null
+        // 全部完成：给出「重做刷分」出口（每套消耗一次作答次数，必须确认）
+        try {
+          await ElMessageBox.confirm(
+            `当前批次的 ${t0.items.length} 套卷子都已处理完成。要把它们再重做一遍吗？` +
+              '（每套会消耗一次作答次数；答案已在库中，重做基本满分）',
+            '已全部完成',
+            { confirmButtonText: '重做一遍', cancelButtonText: '不用了', type: 'info' },
+          )
+        } catch {
+          return null
+        }
+        targets = [...new Set(t0.items.map((it) => it.paper).filter(Boolean))]
+        log('info', `重做：已完成的 ${targets.length} 套将重新作答（沿用当前登录）`)
       }
       if (remaining.length) {
         targets = remaining

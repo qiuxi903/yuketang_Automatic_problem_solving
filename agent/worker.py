@@ -200,7 +200,8 @@ class Worker:
     def _ensure_driver(self):
         if self.driver is not None:
             return self.driver
-        driver = Driver()
+        # 每个工人一个持久化 profile：登录态跨重启保留，同账号续做免扫码
+        driver = Driver(profile=self.name)
         driver.start()
         self.driver = driver
         return driver
@@ -221,12 +222,22 @@ class Worker:
         return not self.busy
 
     def _prewarm(self):
-        """预热浏览器：失败自动重试一次（Chrome 冷启动偶发竞态）。"""
+        """预热浏览器：失败自动重试一次（Chrome 冷启动偶发竞态）。
+
+        预热时顺便识别 profile 里是否保留着登录态：有就把当前账号记下来，
+        之后同账号任务直接沿用（重启 Agent 也不用重新扫码）。
+        """
         for attempt in (1, 2):
             try:
                 driver = self._ensure_driver()
                 driver.page.goto(config.YKT_INDEX, wait_until="domcontentloaded", timeout=30000)
-                log.info("[%s] 浏览器已预热（雨课堂入口页就绪），任务到达后可立即出二维码", self.name)
+                name = driver.ykt_name()
+                if name:
+                    self.ykt_name = name
+                    log.info("[%s] 浏览器已预热，profile 保留了登录态：%s（同账号任务免扫码）",
+                             self.name, name)
+                else:
+                    log.info("[%s] 浏览器已预热（雨课堂入口页就绪），任务到达后可立即出二维码", self.name)
                 return
             except Exception as exc:
                 log.warning("[%s] 浏览器预热失败（第 %d 次）：%s", self.name, attempt, exc)

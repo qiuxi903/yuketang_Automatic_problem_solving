@@ -349,7 +349,7 @@ defineExpose({
             :loading="store.starting"
             @click="continueAnswer()"
           >
-            继续作答（沿用当前账号）
+            继续作答或重做（沿用当前账号）
           </el-button>
           <el-button
             class="full"
