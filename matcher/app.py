@@ -58,7 +58,8 @@ def paper_detail(batch: str, paper: str):
     if rows is None:
         return {"error": "NO_ANSWER_FILE"}
     return {"batch": batch, "paper": paper, "questions": len(rows),
-            "answers": [{"seq": i + 1, "stem": s, "answer": a} for i, (s, a) in enumerate(rows)]}
+            # 题号用库内真实序号（可能缺题），不要用数组下标重新编号
+            "answers": [{"seq": seq, "stem": s, "answer": a} for seq, s, a in rows]}
 
 
 @app.post("/match", response_model=MatchResponse)
@@ -77,10 +78,11 @@ def build_idx(req: IdxRequest):
     库内其它试卷出现过同一道题就直接借用其答案（很多课程题目跨卷复用）。
     """
     answers = core.load_paper(req.batch, req.paper)  # None = 新卷子
-    per_paper = answers or []
+    # 按题号对齐（库内可能缺题：结果页某题没采到答案，不能连累后面所有题错位）
+    per_paper = {seq: ans for seq, _stem, ans in (answers or [])}
     idx, low, noopts = [], [], []
     for i, q in enumerate(req.questions):
-        expected = per_paper[i][1] if i < len(per_paper) else None
+        expected = per_paper.get(i + 1)
         opts = q.get("options") or []
         if not opts:
             idx.append(-1)

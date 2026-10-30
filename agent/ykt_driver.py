@@ -612,15 +612,18 @@ class Driver:
         """考试详情页的作答状态判断（防重复保险）。
 
         返回：
-          "fresh" — 未作答（有 开始答题/开始作答 按钮），可以进入作答；
-          "done"  — 已交卷（显示 再次答题/继续答题/查看试卷 等），不应重复作答；
+          "fresh" — 未作答或作答中（有 开始答题/继续答题 按钮），可以进入作答；
+          "done"  — 已交卷（显示 再次答题/查看试卷 等），不应重复作答；
           "unknown" — 无法识别（按未作答处理，进入后失败会如实报错）。
+
+        注意：「继续答题」= 有未交卷的作答（中途退出过），必须按 fresh 处理——
+        此前把它归为 done，会误判为「已交卷」而跳过作答、只去采集答案（必然失败）。
         """
         try:
-            for text in ("再次答题", "再次作答", "继续答题", "查看试卷", "查看答案", "查看解析"):
+            for text in ("再次答题", "再次作答", "查看试卷", "查看答案", "查看解析"):
                 if self.page.get_by_text(text, exact=True).count():
                     return "done"
-            for text in ("开始答题", "开始作答"):
+            for text in ("开始答题", "开始作答", "继续答题"):
                 if self.page.get_by_text(text, exact=True).count():
                     return "fresh"
         except Exception:
@@ -777,42 +780,52 @@ class Driver:
     def checked_count(self):
         return self.page.locator(OPTION_CHECKED).count()
 
+    def _sleep_ticks(self, seconds, on_tick=None):
+        """带推帧的短等待（中止信号正常传播）。"""
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            self._tick_safe(on_tick)
+            left = deadline - time.time()
+            self.page.wait_for_timeout(min(300, max(50, int(left * 1000))))
+
     def submit(self, on_tick=None):
         """交卷：header 交卷按钮 → 确认弹窗再次点击交卷。
 
         这是唯一会消耗作答次数的动作。采集/复用模式下 submit_forbidden 为 True，
         此处直接抛错，从机制上保证「只获取答案，不交卷」。
-        等待改为自适应：确认弹窗出现即点，跳转结果页即返回（不再固定死等 1.2s+3s）。
+
+        注意：点完顶部「交卷」后必须等确认弹窗真正渲染（经验值 1.2s）再点它，
+        否则会把顶部按钮当成确认按钮点掉，弹窗根本没确认 → 页面停在 /exam/，
+        看起来「已作答」实际未交卷（这就是任务 122 全部失败的原因）。
         """
         if self.submit_forbidden:
             raise RuntimeError("采集模式禁止交卷：已交卷试卷只读结果页，未交卷试卷需用户自行完成")
         self.page.get_by_text("交卷", exact=True).first.click()
-        # 等确认弹窗（最多 2s），出现即点
-        deadline = time.time() + 2
-        clicked = False
-        while time.time() < deadline and not clicked:
+        self._sleep_ticks(1.2, on_tick)   # 等确认弹窗渲染（推帧不冻结预览）
+        confirmed = False
+        try:
+            # 弹窗按钮是 DOM 里最后一个「交卷」按钮；Playwright 会自动等按钮可点击
+            self.page.get_by_role("button", name="交卷").last.click(timeout=5000)
+            confirmed = True
+        except Exception:
             try:
-                btn = self.page.get_by_role("button", name="交卷").last
-                if btn.count():
-                    btn.click(timeout=2000)
-                    clicked = True
-                    break
+                self.page.get_by_text("交卷", exact=True).last.click(timeout=3000)
+                confirmed = True
             except Exception:
                 pass
-            self.page.wait_for_timeout(200)
-        if not clicked:
-            try:
-                self.page.get_by_text("交卷", exact=True).last.click(timeout=2000)
-            except Exception:
-                pass
-        # 等跳转结果页（最多 8s），期间持续回调推帧
-        deadline = time.time() + 8
+        if not confirmed:
+            log.warning("[driver] 交卷确认按钮未点中，页面可能未交卷")
+        # 等跳转结果页（自适应，最多 10s），期间持续推帧
+        deadline = time.time() + 10
         while time.time() < deadline:
             self._tick_safe(on_tick)
             if "/result/" in (self.page.url or ""):
-                break
+                self._sleep_ticks(0.4, on_tick)  # 结果页首屏渲染缓冲
+                return
             self.page.wait_for_timeout(300)
-        self.page.wait_for_timeout(400)  # 结果页首屏渲染的短暂缓冲
+        log.warning("[driver] 交卷后 10s 未跳转结果页（当前 URL：%s）", (self.page.url or "")[:90])
+        # 未跳转 = 交卷没成功：如实报错，别把空卷当成已交卷
+        raise RuntimeError("交卷未成功（确认按钮可能未点中，页面仍停留在答题页）")
 
     def read_score(self, on_tick=None):
         """读取得分，返回 'X/N' 或 None。交卷后先等结果页出现。"""

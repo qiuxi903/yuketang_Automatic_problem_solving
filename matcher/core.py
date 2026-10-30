@@ -135,7 +135,12 @@ def _paper_path(batch: str, name: str) -> str:
 
 
 def load_paper(batch: str, name: str):
-    """读取试卷答案，返回 [(题干, 答案文本), ...]，按题号排序。"""
+    """读取试卷答案，返回 [(题号, 题干, 答案文本), ...]，按题号排序。
+
+    保留题号是关键：结果页采集可能缺题（某题没有正确答案标记），
+    文件里会出现题号断档（如 18 → 20）。调用方必须按题号对齐，
+    不能再按数组下标——否则缺一道会让后面所有答案整体错位。
+    """
     path = _paper_path(batch, name)
     if not os.path.exists(path):
         return None
@@ -148,7 +153,7 @@ def load_paper(batch: str, name: str):
         if m and a:
             rows.append((int(m.group(1)), m.group(2).strip(), a.group(1).strip()))
     rows.sort()
-    return [(stem, ans) for _, stem, ans in rows]
+    return rows
 
 
 def load_manifest():
@@ -202,7 +207,7 @@ def load_all_answers():
             name = p.get("name")
             if not name:
                 continue
-            for stem, ans in (load_paper(batch, name) or []):
+            for _seq, stem, ans in (load_paper(batch, name) or []):
                 if stem and ans:
                     rows.append((norm(stem), stem, ans, name))
     _ALL_CACHE["mtime"] = mt
@@ -241,16 +246,17 @@ def find_cross_answer(stem, exclude_paper=None, min_score=0.92):
 
 
 def verify(batch: str, name: str, selected):
-    """比对作答与答案库，返回差异明细。"""
+    """比对作答与答案库，返回差异明细（按题号对齐，容忍库内缺题）。"""
     answers = load_paper(batch, name)
     if answers is None:
         return {"error": "NO_ANSWER_FILE", "total": len(selected), "bad": len(selected)}
+    seq_map = {seq: ans for seq, _stem, ans in answers}
     bad = []
     for i, sel in enumerate(selected):
-        if i >= len(answers):
+        expected = seq_map.get(i + 1)
+        if expected is None:
             bad.append({"q": i + 1, "selected": sel, "expected": None})
             continue
-        expected = answers[i][1]
         if norm_cs(sel) == norm_cs(expected):
             continue
         ns, ne = norm(sel), norm(expected)
