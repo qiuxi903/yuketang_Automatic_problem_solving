@@ -593,13 +593,24 @@ class Worker:
             # 库里有答案就用库所在批次，否则用任务批次（新卷子：build_idx 会返回无答案，走兜底）
             return "answered" if self._answer_and_submit(driver, task, lib_batch or batch, paper, mode) else "failed"
 
-        # 规则3：答案库已有（含别的账号采集的）→ 直接复用，不抓取、不作答、不交卷
+        # 规则3：答案库已有（含别的账号采集的）→ 直接复用，不抓取、不作答、不交卷。
+        # 但仅当库内答案「完整」时复用：结果页偶尔有题不显示正确标记（如 1915 第 19 题），
+        # 库里缺题时直接复用会让缺口永远补不上——此时重新采集补缺。
         if lib_batch and (mode == "collect" or answered):
-            log.info("[%s] %s 答案库已有（批次 %s），直接复用", self.name, name, lib_batch)
-            self.backend.post_progress(task_id, name, exam_id, status="REUSED",
-                                       message="答案库已有该卷答案，直接复用（未重复获取）")
-            self._reuse_from_lib(task_id, lib_batch, name, exam_id)
-            return "reused"
+            lib_count = self._lib_answer_count(lib_batch, name)
+            need = paper.get("questionCount")
+            if need and lib_count < need:
+                log.info("[%s] %s 答案库该卷不完整（%d/%d 题），重新采集补缺",
+                         self.name, name, lib_count, need)
+                self.backend.post_progress(
+                    task_id, name, exam_id,
+                    message=f"答案库该卷只有 {lib_count}/{need} 题，重新读取结果页补齐")
+            else:
+                log.info("[%s] %s 答案库已有（批次 %s），直接复用", self.name, name, lib_batch)
+                self.backend.post_progress(task_id, name, exam_id, status="REUSED",
+                                           message="答案库已有该卷答案，直接复用（未重复获取）")
+                self._reuse_from_lib(task_id, lib_batch, name, exam_id)
+                return "reused"
 
         # 规则2：未交卷 + 采集模式 → 不能取答案，提示先去做题
         if mode == "collect" and not answered:
@@ -884,6 +895,13 @@ class Worker:
         except Exception:
             return False
 
+    def _lib_answer_count(self, batch, name):
+        """答案库里该卷的答案条数（用于判断是否完整）。"""
+        try:
+            return int((self.matcher.paper(batch, name) or {}).get("questions") or 0)
+        except Exception:
+            return 0
+
     def _reuse_from_lib(self, task_id, batch, name, exam_id):
         """把答案库中已有的答案直接回传后端（跨账号复用），不重复抓取。"""
         try:
@@ -1020,6 +1038,8 @@ class Worker:
                 "entryText": (hit or {}).get("entryText"),
                 "answered": bool((hit or {}).get("answered")),
                 "entryStatus": (hit or {}).get("status"),
+                # 卷子总题数（学习日志「共 N 题」）：用于判断库内答案是否完整
+                "questionCount": (hit or {}).get("questionCount"),
             })
         return plan
 
