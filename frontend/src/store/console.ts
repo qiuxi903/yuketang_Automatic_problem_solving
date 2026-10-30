@@ -255,7 +255,8 @@ export const useConsoleStore = defineStore('console', () => {
         if (info.status === 'WAITING_SCAN') return
         stopPolling()
       } catch {
-        stopPolling()
+        // 单次请求失败（手机/内网穿透抖动）不能停止轮询——
+        // 否则一次失败就永远刷不到二维码，弹窗一直显示「二维码生成中…」
       }
     }, 1000)
   }
@@ -263,7 +264,12 @@ export const useConsoleStore = defineStore('console', () => {
   async function loadSession() {
     const current = task.value
     if (!current?.sessionId) return
-    session.value = await getSession(current.sessionId)
+    try {
+      session.value = await getSession(current.sessionId)
+    } catch {
+      // 拉取失败（弱网）不阻断任务绑定：轮询/手动刷新会再试
+      return
+    }
     if (session.value.status === 'WAITING_SCAN') startPolling()
     else stopPolling()
   }

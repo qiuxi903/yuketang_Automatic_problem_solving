@@ -82,6 +82,11 @@ watch(
   },
 )
 
+// 打开扫码弹窗时立即拉一次最新会话（不等 1s 轮询），二维码出现更快
+watch(qrVisible, (open) => {
+  if (open) void store.loadSession()
+})
+
 // 扫码成功后自动关闭扫码弹窗，无需手动点「关闭」
 watch(
   () => store.session?.status,
@@ -469,7 +474,8 @@ defineExpose({
           请使用微信或雨课堂 App 扫码。扫码成功后本弹窗会自动关闭；二维码过期后点「重新获取二维码」即可刷新。
         </p>
         <p v-if="!store.session?.qrcode" class="qr-tip qr-tip-warn">
-          二维码迟迟不出现？点下方「重新获取二维码」；仍不行请在启动器里重启 Agent。
+          二维码生成中…如果任务在排队（同时做题的人较多），等前面的任务完成会自动出码；
+          超过 1 分钟仍没有，点下方「重新获取二维码」，或请管理员确认 Agent 正在运行。
         </p>
       </div>
 
