@@ -112,7 +112,9 @@ cd agent;     python main.py
 
 ### 5. 内网穿透（可选）
 
-只穿透前端 25173 即可（前端自带 `/api` 代理到后端，后端 28080 不要直接暴露）。HTTP 类穿透（ngrok / cloudflared 等）或 TCP 类（frp）均可；穿透域名会变，后端 CORS 已放行任意来源。
+只穿透**前端端口 25173** 即可（前端自带 `/api` 与 `/ws` 代理到后端，后端 28080 不要直接暴露）。HTTP 类穿透（ngrok / cloudflared 等）或 TCP 类（frp）均可；穿透域名会变，后端 CORS 已放行任意来源。
+
+仓库内置了 frp 配置模板：`tunnel/frpc.ini`（客户端，只映射 25173）与 `tunnel/frps.ini`（服务端），改掉 `server_addr` 与 `token` 即可用；域名方式配合服务器 Nginx 终止 TLS 即为 HTTPS。
 
 ## 目录结构
 
