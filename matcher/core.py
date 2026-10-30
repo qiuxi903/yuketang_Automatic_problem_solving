@@ -60,26 +60,55 @@ def cands(text: str):
     return out
 
 
+_POS_RE = re.compile(r"\s*⟦pos:([\d,]+)⟧")
+
+
+def split_position(answer: str):
+    """拆出答案末尾的位置标记：'百度 ⟦pos:2⟧' → ([2], '百度')。
+
+    位置标记来自结果页采集（正确选项是第几个，1 基），用于
+    「多个选项文字完全相同」时的消歧（如三个「百度」）。
+    """
+    if not answer:
+        return [], answer
+    m = _POS_RE.search(answer)
+    if not m:
+        return [], answer
+    pos = [int(x) for x in m.group(1).split(",") if x.isdigit()]
+    return pos, _POS_RE.sub("", answer).strip()
+
+
 def match_index(options, answer: str):
-    """在选项文本中定位答案，返回 (索引, 得分)。找不到返回 (-1, 0.0)。"""
+    """在选项文本中定位答案，返回 (索引, 得分)。找不到返回 (-1, 0.0)。
+
+    答案带 ⟦pos:N⟧ 位置标记时：若多个选项文字完全相同（精确命中多个），
+    优先用采集时的正确位置消歧——否则永远只能猜第一个，必然选错。
+    """
     if answer is None:
         return -1, 0.0
-    answer = str(answer)
-    ne = norm(answer)
-    necs = norm_cs(answer)
-    se = sign_of(answer)
+    positions, body = split_position(str(answer))
+    if not body:
+        return -1, 0.0
+    ne = norm(body)
+    necs = norm_cs(body)
+    se = sign_of(body)
 
-    for j, text in enumerate(options):
-        for body in cands(text):
-            if norm_cs(body) == necs:
-                return j, 1.0
+    exact = [j for j, text in enumerate(options)
+             if any(norm_cs(b) == necs for b in cands(text))]
+    if len(exact) == 1:
+        return exact[0], 1.0
+    if len(exact) > 1:
+        # 选项文字完全相同：按采集位置消歧（选项顺序若被打乱则退回第一个）
+        if positions and (positions[0] - 1) in exact:
+            return positions[0] - 1, 1.0
+        return exact[0], 1.0
 
     def best(use_sign: bool):
         bj, bs = -1, 0.0
         for j, text in enumerate(options):
-            for body in cands(text):
-                nb = norm(body)
-                if use_sign and sign_of(body) != se:
+            for b in cands(text):
+                nb = norm(b)
+                if use_sign and sign_of(b) != se:
                     continue
                 if nb == ne:
                     return j, 1.0
@@ -259,9 +288,11 @@ def verify(batch: str, name: str, selected):
         if expected is None:
             bad.append({"q": i + 1, "selected": sel, "expected": None})
             continue
-        if norm_cs(sel) == norm_cs(expected):
+        _sp, sel_body = split_position(sel)
+        _ep, exp_body = split_position(expected)
+        if norm_cs(sel_body) == norm_cs(exp_body):
             continue
-        ns, ne = norm(sel), norm(expected)
+        ns, ne = norm(sel_body), norm(exp_body)
         if ns != ne and sim(ns, ne) < 0.80 and ns not in ne and ne not in ns:
             bad.append({"q": i + 1, "selected": sel, "expected": expected})
     return {"total": len(selected), "bad": len(bad), "mismatches": bad}

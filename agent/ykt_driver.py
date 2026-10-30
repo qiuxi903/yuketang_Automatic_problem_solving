@@ -770,6 +770,11 @@ class Driver:
               const hrefs = [...l.querySelectorAll('a[href]')]
                 .map(a => a.getAttribute('href')).filter(Boolean);
               if (hrefs.length) return text + ' ⟦' + hrefs.join('|') + '⟧';
+              // 提示属性里的完整内容（部分页面把被截断的 HTML 放在 title 里）
+              const tips = [...l.querySelectorAll('[title], [data-tip], [data-content]')]
+                .map(e => e.getAttribute('title') || e.getAttribute('data-tip') || e.getAttribute('data-content'))
+                .filter(Boolean);
+              if (tips.length) return text + ' ⟦' + normSp(tips.join('|')) + '⟧';
               return text;
             });
             const multi = !!b.querySelector('label.el-checkbox');
@@ -930,17 +935,30 @@ class Driver:
         const hrefs = [...labelEl.querySelectorAll('a[href]')]
           .map(a => a.getAttribute('href')).filter(Boolean);
         if (hrefs.length) return text + ' ⟦' + hrefs.join('|') + '⟧';
+        const tips = [...labelEl.querySelectorAll('[title], [data-tip], [data-content]')]
+          .map(e => e.getAttribute('title') || e.getAttribute('data-tip') || e.getAttribute('data-content'))
+          .filter(Boolean);
+        if (tips.length) return text + ' ⟦' + normSp(tips.join('|')) + '⟧';
         return text;
       };
       const collectMarks = (b) => {
         const oks = [...b.querySelectorAll('.dot-success, [class*="dot-success"]')];
+        const labels = [...b.querySelectorAll('label.el-radio, label.el-checkbox')];
         const parts = [];
         for (const ok of oks) {
           const row = ok.closest('label') || ok.parentElement;
           const txt = optText(row);
           if (txt) parts.push(txt);
         }
-        return parts.join(SEP);
+        let answer = parts.join(SEP);
+        // 记录正确选项的位置（1 基，多选用逗号）：选项可见文字相同时
+        // （如三个「百度」），答案文本无法区分，位置是唯一的消歧线索
+        if (answer && labels.length) {
+          const positions = oks.map(ok => labels.indexOf(ok.closest('label')))
+            .filter(i => i >= 0).map(i => i + 1);
+          if (positions.length) answer += ' ⟦pos:' + positions.join(',') + '⟧';
+        }
+        return answer;
       };
       if (blocks.length) {
         for (const b of blocks) {
