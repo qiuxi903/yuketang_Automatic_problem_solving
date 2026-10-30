@@ -627,10 +627,32 @@ class Driver:
             pass
         return "unknown"
 
+    def _find_question_page(self):
+        """在当前标签页及上下文里找「有题目块」的页面（开始按钮可能另开标签页）。"""
+        try:
+            if self.page.locator(QUESTION_BLOCK).count():
+                return self.page
+        except Exception:
+            pass
+        try:
+            for p in self.page.context.pages:
+                if p is self.page:
+                    continue
+                try:
+                    if p.locator(QUESTION_BLOCK).count():
+                        return p
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return None
+
     def enter_exam(self, on_tick=None):
         """在考试详情页点「开始答题 / 再次答题」，并在提示页点「开始」，进入答题页。
 
-        不再用固定 2.5s+3s 死等：点完直接轮询题目块是否出现（出现即返回）。
+        关键：考前提示页是 SPA，点「开始答题」后按钮渲染有延迟——
+        必须「轮询等开始按钮出现再点」，绝不能点完立刻找（找不到就会跳过点击，
+        页面永远停在提示页，最终报「答题页未就绪」）。点完同样轮询题目块。
         """
         page = self.page
         for text in PAPER_ENTRY_TEXTS:
@@ -649,32 +671,46 @@ class Driver:
             except Exception:
                 pass
             self.page = target
-            # 考前提示页：点「开始」开始计时并进入答题页
-            try:
-                start = target.get_by_text("开始", exact=True).last
-                if start.count():
-                    start.click(timeout=5000)
-            except Exception:
-                pass
-            # 等题目块出现（最多 10s），期间持续回调推帧
-            deadline = time.time() + 10
+
+            # 等「开始」按钮渲染出来（最多 8s，出现即点）
+            clicked = False
+            deadline = time.time() + 8
             while time.time() < deadline:
                 self._tick_safe(on_tick)
                 try:
-                    if self.page.locator(QUESTION_BLOCK).count():
-                        return True
+                    start = target.get_by_text("开始", exact=True).last
+                    if start.count() and start.is_visible():
+                        start.click(timeout=3000)
+                        clicked = True
+                        break
                 except Exception:
                     pass
-                self.page.wait_for_timeout(300)
-            return True
+                target.wait_for_timeout(300)
+
+            # 等题目块出现（最多 15s）；「开始」若另开了新标签页也跟着切过去
+            deadline = time.time() + 15
+            while time.time() < deadline:
+                self._tick_safe(on_tick)
+                found = self._find_question_page()
+                if found is not None:
+                    self.page = found
+                    log.info("[driver] 已进入答题页（入口「%s」，开始按钮%s）",
+                             text, "已点击" if clicked else "未出现")
+                    return True
+                target.wait_for_timeout(300)
+            log.warning("[driver] 点击「%s」后 15s 未出现题目块（开始按钮%s，当前 URL：%s）",
+                        text, "已点击" if clicked else "未出现", (self.page.url or "")[:90])
+            return clicked  # 已点开始：交给 wait_exam_ready 继续等；未点到则算失败
         return False
 
     def wait_exam_ready(self, timeout=30000, on_tick=None):
-        """等待答题页渲染完成（题目块出现）。"""
+        """等待答题页渲染完成（题目块出现；另开标签页也能找到）。"""
         deadline = time.time() + timeout / 1000
         while time.time() < deadline:
             self._tick_safe(on_tick)
-            if self.page.locator(QUESTION_BLOCK).count():
+            found = self._find_question_page()
+            if found is not None:
+                self.page = found
                 return True
             self.page.wait_for_timeout(400)
         return False
