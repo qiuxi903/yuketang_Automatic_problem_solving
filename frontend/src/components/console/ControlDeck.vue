@@ -292,6 +292,13 @@ defineExpose({
         >
           新建任务，扫码登录雨课堂
         </el-button>
+        <el-button class="full" :icon="SwitchButton" :loading="store.starting" @click="switchAccount">
+          切换账号（重新扫码）
+        </el-button>
+        <p class="hint">
+          浏览器里还登着别人的雨课堂账号？先点「切换账号」：会清空登录态并弹二维码，
+          不会自动登录上一个人。
+        </p>
         <!-- 答案查询统一入口：答案中心页（搜索/浏览/导出/获取记录），不再单独弹窗 -->
         <div class="menu-group mobile-hide">
           <span class="eyebrow">不动手做，只想查答案？</span>
@@ -395,6 +402,17 @@ defineExpose({
           </p>
         </div>
 
+        <!-- 换号放在扫码/会话之前：要换账号时先看到它，避免直接点开始被自动登录成上一个人 -->
+        <div class="menu-group">
+          <span class="eyebrow">换号 / 重新扫码</span>
+          <el-button class="full" :icon="SwitchButton" :loading="store.starting" @click="switchAccount">
+            切换账号（重新扫码）
+          </el-button>
+          <p class="hint">
+            要换雨课堂账号时点这里：Agent 会清空当前登录态并弹二维码，不会沿用上一个人的账号。
+          </p>
+        </div>
+
         <div class="menu-group">
           <span class="eyebrow">扫码 / 会话</span>
           <div class="btn-grid">
@@ -406,13 +424,7 @@ defineExpose({
           <el-button class="full" :icon="CircleClose" :disabled="!store.session" @click="store.closeActiveSession()">
             关闭会话（二维码作废）
           </el-button>
-          <el-button class="full" :icon="SwitchButton" :loading="store.starting" @click="switchAccount">
-            切换账号（重新扫码）
-          </el-button>
-          <p class="hint">
-            二维码过期时点「重新获取二维码」；要换雨课堂账号请点「切换账号」——
-            Agent 会清空当前登录态，重新扫码即可（不会沿用上一个人的账号）。
-          </p>
+          <p class="hint">二维码过期时点「重新获取二维码」；会话关闭后需重新扫码。</p>
         </div>
 
         <button class="ghost-link mobile-hide" type="button" @click="copyToken">复制任务信息（排查用）</button>
