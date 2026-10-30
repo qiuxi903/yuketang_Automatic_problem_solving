@@ -468,6 +468,9 @@ defineExpose({
         <p class="qr-tip">
           请使用微信或雨课堂 App 扫码。扫码成功后本弹窗会自动关闭；二维码过期后点「重新获取二维码」即可刷新。
         </p>
+        <p v-if="!store.session?.qrcode" class="qr-tip qr-tip-warn">
+          二维码迟迟不出现？点下方「重新获取二维码」；仍不行请在启动器里重启 Agent。
+        </p>
       </div>
 
       <template #footer>
@@ -1023,5 +1026,8 @@ defineExpose({
   line-height: 1.7;
   color: var(--ink-400);
   text-align: center;
+}
+.qr-tip-warn {
+  color: var(--warn);
 }
 </style>

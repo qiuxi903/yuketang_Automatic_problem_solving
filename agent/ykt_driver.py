@@ -197,13 +197,22 @@ class Driver:
         except Exception:
             return False
 
+    def _real_login(self):
+        """真实登录：应用壳在 + 能读到账号名。
+
+        只看应用壳不够：清空登录态后 SPA 会先闪出一层壳子（导航都在、但没有账号数据），
+        据此误判「已登录」会直接跳过二维码，前端就一直显示「二维码生成中…」。
+        账号名只有在真正登录后才读得到（气泡/localStorage），用它兜住竞态。
+        """
+        return self._app_shell_shown() and bool(self.ykt_name())
+
     def open_and_capture_qr(self):
         """打开入口；未登录时截取二维码，返回 dataURL；已登录返回 None。
 
-        注意竞态：清空登录态后，SPA 的应用壳会先闪一下（带「我听的课」导航）
-        再跳登录页——只看一次 DOM 会把「闪出的应用壳」当成已登录，从而跳过扫码
-        （日志表现为「扫码登录成功：None」）。所以登录页信号优先；
-        判定已登录要求应用壳连续稳定存在（≥1.2s 且没有跳登录页）。
+        判定规则：
+        - 出现登录页信号（URL next= / 二维码图）→ 未登录 → 截图
+        - 应用壳 + 账号名同时存在且稳定 ≥1s → 已登录 → 不截图
+        - 超时仍无法确认已登录 → 一律截图（宁可多显示一次二维码，也不能让用户干等）
         """
         self.page.goto(config.YKT_INDEX, wait_until="domcontentloaded")
         deadline = time.time() + 10
@@ -211,16 +220,16 @@ class Driver:
         while time.time() < deadline:
             if self._login_page_shown():
                 return self.capture_qrcode()
-            if self._app_shell_shown():
+            if self._real_login():
                 if logged_seen_at == 0.0:
                     logged_seen_at = time.time()
-                elif time.time() - logged_seen_at >= 1.2:
-                    return None  # 应用壳稳定存在且没跳登录页 → 确实已登录
+                elif time.time() - logged_seen_at >= 1.0:
+                    return None  # 真实登录且稳定 → 无需扫码
             else:
                 logged_seen_at = 0.0
             self.page.wait_for_timeout(300)
-        # 超时：登录页没出现、应用壳也没稳定 → 按未登录处理，截一张兜底图
-        return None if self._app_shell_shown() else self.capture_qrcode()
+        # 超时：无法确认真实登录 → 按未登录处理，截图（capture_qrcode 自带兜底截图）
+        return None if self._real_login() else self.capture_qrcode()
 
     # 二维码必须是「接近正方形 + 尺寸足够大」的图片，
     # 用来排除 changeImg 之类的小图标（76×72、0×0 等），它们同样命中 img[src*='qr']。
@@ -303,10 +312,10 @@ class Driver:
 
     def is_logged_in(self):
         """是否已登录：登录页信号优先（URL 带 next= 或出现二维码），
-        否则以应用壳（「我听的课/我教的课」）为准。"""
+        否则要求「应用壳 + 能读到账号名」——闪屏的应用壳不算登录。"""
         if self._login_page_shown():
             return False
-        return self._app_shell_shown()
+        return self._real_login()
 
     def wait_login(self, timeout=None):
         """等待用户扫码完成。超时抛 LoginRequired。"""

@@ -181,11 +181,22 @@ class Worker:
         """
         deadline = time.time() + config.LOGIN_TIMEOUT
         posted_at = 0.0
+        shell_since = 0.0
         while time.time() < deadline:
             if self._abort.is_set():
                 raise AbortTask()
             if driver.is_logged_in():
                 return
+            # 兜底：页面已经是登录后的应用壳、且不显示登录页，但账号名读不到
+            # （个别账号/页面改版）——持续 12s 就按已登录继续，避免白等 3 分钟
+            if driver._app_shell_shown() and not driver._login_page_shown():
+                if shell_since == 0.0:
+                    shell_since = time.time()
+                elif time.time() - shell_since >= 12:
+                    log.warning("[%s] 已登录应用壳但账号名读取失败，按已登录继续", self.name)
+                    return
+            else:
+                shell_since = 0.0
             if time.time() - posted_at >= 12:
                 try:
                     qr = driver.capture_qrcode()
