@@ -599,12 +599,14 @@ class Worker:
         if lib_batch and (mode == "collect" or answered):
             lib_count = self._lib_answer_count(lib_batch, name)
             need = paper.get("questionCount")
-            if need and lib_count < need:
-                log.info("[%s] %s 答案库该卷不完整（%d/%d 题），重新采集补缺",
-                         self.name, name, lib_count, need)
+            incomplete = self._lib_incomplete(lib_batch, name) or (
+                need and lib_count < need)
+            if incomplete:
+                log.info("[%s] %s 答案库该卷不完整（%s），重新采集补缺",
+                         self.name, name, f"{lib_count}/{need} 题" if need else "题号断档")
                 self.backend.post_progress(
                     task_id, name, exam_id,
-                    message=f"答案库该卷只有 {lib_count}/{need} 题，重新读取结果页补齐")
+                    message=f"答案库该卷不完整（{lib_count} 题），重新读取结果页补齐")
             else:
                 log.info("[%s] %s 答案库已有（批次 %s），直接复用", self.name, name, lib_batch)
                 self.backend.post_progress(task_id, name, exam_id, status="REUSED",
@@ -901,6 +903,21 @@ class Worker:
             return int((self.matcher.paper(batch, name) or {}).get("questions") or 0)
         except Exception:
             return 0
+
+    def _lib_incomplete(self, batch, name):
+        """答案库里该卷是否缺题：题号断档即不完整（如 1915 缺第 19 题：18 → 20）。
+
+        学习日志的卡片不一定带「共 N 题」，不能只靠 questionCount 判断完整性；
+        题号断档是采集缺题留下的确定痕迹。
+        """
+        try:
+            rows = ((self.matcher.paper(batch, name) or {}).get("answers") or [])
+            seqs = sorted({int(r.get("seq") or 0) for r in rows if r.get("seq")})
+            if not seqs:
+                return False
+            return seqs[-1] > len(seqs)
+        except Exception:
+            return False
 
     def _reuse_from_lib(self, task_id, batch, name, exam_id):
         """把答案库中已有的答案直接回传后端（跨账号复用），不重复抓取。"""
