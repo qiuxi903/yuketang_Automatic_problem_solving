@@ -9,6 +9,7 @@ import {
   Promotion,
   Refresh,
   Select,
+  SwitchButton,
   VideoPause,
   VideoPlay,
 } from '@element-plus/icons-vue'
@@ -172,6 +173,21 @@ async function start() {
     qrVisible.value = true
     ElMessage.success('任务已创建，请扫码登录雨课堂')
   }
+}
+
+/** 切换雨课堂账号：新建任务并强制重新扫码（Agent 会清空当前登录态，不复用上一个人的账号）。 */
+async function switchAccount() {
+  try {
+    await ElMessageBox.confirm(
+      '将新建一个任务并重新扫码登录：Agent 会清空浏览器里当前的登录态，用新账号扫码即可。' +
+        '（若当前任务还在执行，请先中断它）',
+      '切换雨课堂账号',
+      { confirmButtonText: '重新扫码', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  await start()
 }
 
 async function rescan() {
@@ -390,7 +406,13 @@ defineExpose({
           <el-button class="full" :icon="CircleClose" :disabled="!store.session" @click="store.closeActiveSession()">
             关闭会话（二维码作废）
           </el-button>
-          <p class="hint">二维码过期时点「重新获取二维码」；会话关闭后需重新扫码。</p>
+          <el-button class="full" :icon="SwitchButton" :loading="store.starting" @click="switchAccount">
+            切换账号（重新扫码）
+          </el-button>
+          <p class="hint">
+            二维码过期时点「重新获取二维码」；要换雨课堂账号请点「切换账号」——
+            Agent 会清空当前登录态，重新扫码即可（不会沿用上一个人的账号）。
+          </p>
         </div>
 
         <button class="ghost-link mobile-hide" type="button" @click="copyToken">复制任务信息（排查用）</button>

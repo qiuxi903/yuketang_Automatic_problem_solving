@@ -97,11 +97,11 @@ class Driver:
         self._launch_context()
 
     def reset_context(self):
-        """切换账号：重建上下文并清空登录态（profile 目录本身保留，只是清掉 Cookie/存储）。
+        """切换账号：重建上下文并彻底清空登录态（profile 目录本身保留）。
 
-        多账号切换的关键：不同雨课堂账号的任务必须清空登录，
-        否则浏览器里残留上一个账号的 Cookie，下一个任务会「继承」别人的登录（串号）。
-        同一账号续做不会走这里，所以重启 Agent 后仍能免扫码。
+        多账号切换的关键：雨课堂的登录态既有 Cookie 也存在 localStorage（vuex），
+        必须两者都清干净——否则新任务会「继承」上一个账号的登录（串号），
+        用户明明要扫码换号，却被自动登录成之前那个人。
         """
         try:
             if self.context:
@@ -109,10 +109,25 @@ class Driver:
         except Exception:
             pass
         self._launch_context()
+        # 1) CDP 按站点清空全部存储（Cookie / localStorage / IndexedDB / cache），
+        #    不依赖页面能否打开，最可靠
+        try:
+            cdp = self.context.new_cdp_session(self.page)
+            for origin in ("https://www.yuketang.cn", "https://examination.xuetangx.com",
+                           "https://www.xuetangx.com", "https://changjiang.yuketang.cn"):
+                try:
+                    cdp.send("Storage.clearDataForOrigin",
+                             {"origin": origin, "storageTypes": "all"})
+                except Exception:
+                    pass
+            cdp.detach()
+        except Exception:
+            pass
         try:
             self.context.clear_cookies()
         except Exception:
             pass
+        # 2) 兜底：打开入口页再清一次本地存储（页面能打开时更保险）
         try:
             self.page.goto(config.YKT_INDEX, wait_until="domcontentloaded")
             self.page.evaluate("() => { try { localStorage.clear(); sessionStorage.clear(); } catch (e) {} }")
