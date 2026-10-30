@@ -758,7 +758,19 @@ class Driver:
             const stem = (stemEl ? stemEl.innerText : (b.innerText || '')).trim();
             const opts = [...b.querySelectorAll('label.el-radio, label.el-checkbox')].map(l => {
               const t = l.querySelector('.radioText');
-              return ((t ? t.innerText : l.innerText) || '').trim();
+              const el = t || l;
+              const text = ((el.innerText || '') || '').trim();
+              const html = (el.innerHTML || '');
+              const normSp = (s) => (s || '').replace(/\\s+/g, ' ').trim();
+              // 选项内嵌标签（链接/HTML 代码被渲染）时附「标记签名」：
+              // 否则多个选项可见文字相同（如三个「百度」）时无法区分，必然选错
+              if (normSp(html.replace(/<[^>]*>/g, '')) !== normSp(text)) {
+                return text + ' ⟦' + normSp(html) + '⟧';
+              }
+              const hrefs = [...l.querySelectorAll('a[href]')]
+                .map(a => a.getAttribute('href')).filter(Boolean);
+              if (hrefs.length) return text + ' ⟦' + hrefs.join('|') + '⟧';
+              return text;
             });
             const multi = !!b.querySelector('label.el-checkbox');
             return {stem, options: opts, type: multi ? 'multi' : 'single'};
@@ -839,12 +851,15 @@ class Driver:
                 pass
         if not confirmed:
             log.warning("[driver] 交卷确认按钮未点中，页面可能未交卷")
-        # 等跳转结果页（自适应，最多 10s），期间持续推帧
-        deadline = time.time() + 10
+        # 等交卷生效：雨课堂可能跳 /result/（直接结果页），也可能跳 /cover/
+        # （考试封面页，同样代表已交卷）——只认 /result/ 会把成功误判为失败
+        deadline = time.time() + 15
         while time.time() < deadline:
             self._tick_safe(on_tick)
-            if "/result/" in (self.page.url or ""):
-                self._sleep_ticks(0.4, on_tick)  # 结果页首屏渲染缓冲
+            url = self.page.url or ""
+            if "/result/" in url or "/cover/" in url or self._on_cover_page():
+                self._sleep_ticks(0.4, on_tick)  # 页面首屏渲染缓冲
+                log.info("[driver] 已交卷（页面跳转：%s）", url[:70])
                 return
             self.page.wait_for_timeout(300)
         log.warning("[driver] 交卷后 10s 未跳转结果页（当前 URL：%s）", (self.page.url or "")[:90])
@@ -900,13 +915,29 @@ class Driver:
       const push = (stem, answer) => rows.push({seq: rows.length + 1,
         stem: (stem || '').replace(/\s+/g, ' ').trim(),
         answer: (answer || '').replace(/\s+/g, ' ').trim()});
+      const normSp = (s) => (s || '').replace(/\s+/g, ' ').trim();
+      // 选项文字提取：与答题页抓题保持同一规则——选项内嵌标签（链接/HTML 代码）
+      // 时附加「标记签名」，否则多个选项可见文字相同（如三个「百度」）无法区分
+      const optText = (labelEl) => {
+        if (!labelEl) return '';
+        const t = labelEl.querySelector('.radioText');
+        const el = t || labelEl;
+        const text = ((el.innerText || '') || '').trim();
+        const html = (el.innerHTML || '');
+        if (normSp(html.replace(/<[^>]*>/g, '')) !== normSp(text)) {
+          return text + ' ⟦' + normSp(html) + '⟧';
+        }
+        const hrefs = [...labelEl.querySelectorAll('a[href]')]
+          .map(a => a.getAttribute('href')).filter(Boolean);
+        if (hrefs.length) return text + ' ⟦' + hrefs.join('|') + '⟧';
+        return text;
+      };
       const collectMarks = (b) => {
         const oks = [...b.querySelectorAll('.dot-success, [class*="dot-success"]')];
         const parts = [];
         for (const ok of oks) {
           const row = ok.closest('label') || ok.parentElement;
-          const t = row ? (row.querySelector('.radioText') || row) : null;
-          const txt = ((t ? t.innerText : '') || '').trim();
+          const txt = optText(row);
           if (txt) parts.push(txt);
         }
         return parts.join(SEP);
@@ -929,8 +960,7 @@ class Driver:
           if (box && /题|question|item|exam/i.test(box.className || '') && box.innerText.length > 20) break;
         }
         const row = m.closest('label') || m.parentElement;
-        const t = row ? (row.querySelector('.radioText') || row) : null;
-        const answer = ((t ? t.innerText : '') || '').trim();
+        const answer = optText(row);
         if (!answer) continue;
         const key = box || document.body;
         if (!byBlock.has(key)) {

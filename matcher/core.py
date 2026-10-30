@@ -253,6 +253,8 @@ def verify(batch: str, name: str, selected):
     seq_map = {seq: ans for seq, _stem, ans in answers}
     bad = []
     for i, sel in enumerate(selected):
+        if not sel:
+            continue  # 未作答的题（无选项/未匹配）跳过，不算差异
         expected = seq_map.get(i + 1)
         if expected is None:
             bad.append({"q": i + 1, "selected": sel, "expected": None})

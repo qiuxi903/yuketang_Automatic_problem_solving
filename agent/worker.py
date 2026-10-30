@@ -736,12 +736,12 @@ class Worker:
 
             driver.click_answers(idx, on_progress=_report)
             self._push_frame(driver, task_id, force=True)
-            # idx 每项是 int（单选）或 list[int]（多选）；拼出已选选项文本供校验
+            # idx 每项是 int（单选）或 list[int]（多选）；拼出已选选项文本供校验。
+            # 未作答的题保留空串占位，保证下标与题号对齐（否则校验结果整体错位）
             selected = []
             for i in range(min(len(questions), len(idx))):
                 texts = _picked_texts(questions[i].get("options", []), idx[i])
-                if texts:
-                    selected.append("；".join(texts))
+                selected.append("；".join(texts) if texts else "")
             checked = driver.checked_count()
             expected_checked = sum(_pick_count(x) for x in idx)
             if checked < expected_checked:
@@ -763,6 +763,11 @@ class Worker:
             self._push_frame(driver, task_id, force=True)
             self._stage(task_id, f"{name}：读取成绩")
             score = driver.read_score(on_tick=tick)
+            # 交卷后雨课堂常停在封面页（/cover/）而不是结果页：先打开结果页再采集，
+            # 否则会误报「未采到任何答案」
+            if "/result/" not in (driver.page.url or ""):
+                self._stage(task_id, f"{name}：打开结果页")
+                driver.open_result(exam_id, on_tick=tick)
             self._push_frame(driver, task_id, force=True)
             self.backend.post_progress(task_id, name, exam_id,
                                        seq=len(questions), total=len(questions),
