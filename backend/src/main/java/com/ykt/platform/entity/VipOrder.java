@@ -2,8 +2,6 @@ package com.ykt.platform.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -66,8 +64,7 @@ public class VipOrder {
     @Column(nullable = false)
     private int payableFen;
 
-    /** CREATED / PAID / CANCELLED / REJECTED。 */
-    @Enumerated(EnumType.STRING)
+    /** CREATED / PAID / CANCELLED / REJECTED（字符串常量存储，取值见本类常量）。 */
     @Column(nullable = false, length = 16)
     private String status = STATUS_CREATED;
 
