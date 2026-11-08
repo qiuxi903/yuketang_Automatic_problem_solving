@@ -9,7 +9,7 @@ public class VipRequiredException extends RuntimeException {
     private final String batch;
 
     public VipRequiredException(String batch) {
-        super("该日期尚未解锁，需要付费后才能做题");
+        super("该日期尚未解锁：解锁后才能自动做题（取答案与答案下载免费）");
         this.batch = batch;
     }
 

@@ -128,8 +128,9 @@ public class TaskService {
         }
         // 批次可后置：为空时先扫码登录，待 Agent 回传账号作业清单后再由用户确认批次
         String batch = request.batch() == null || request.batch().isBlank() ? null : request.batch();
-        // VIP 付费闸门：批次已知（含重做任务）时先校验解锁态，未解锁 → 402 跳付费页
-        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin());
+        // VIP 付费闸门（只有自动做题收费，取答案 collect 免费）：批次已知（含重做任务）时先校验解锁态
+        String reqMode = request.mode() == null || request.mode().isBlank() ? "answer" : request.mode();
+        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin(), reqMode);
         List<String> paperNames = batch == null ? List.of() : answerLibService.paperNames(batch);
         // 重做任务：只做指定卷子（通常来自上一任务「取答案未做」的弹窗一键重做）
         List<String> redo = request.redoPapers() == null ? List.of() : request.redoPapers().stream()
@@ -311,7 +312,7 @@ public class TaskService {
         // 闸门兜底：创建/确认批次之后权益被撤销（管理员撤销、退款）时，领取前再拦一次
         if (task.getBatch() != null) {
             try {
-                vipService.checkBatchAccess(task.getUserId(), task.getBatch(), false);
+                vipService.checkBatchAccess(task.getUserId(), task.getBatch(), false, task.getMode());
             } catch (VipRequiredException ex) {
                 taskQueue.remove(task.getId());
                 task.setStatus(TaskStatus.FAILED);
@@ -377,8 +378,9 @@ public class TaskService {
         if (task.getStatus() != TaskStatus.WAITING_BATCH) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "当前任务状态不允许选择批次");
         }
-        // 批次已确定（用户确认或重做入口）：付费闸门在此拦截，未解锁批次 → 402
-        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin());
+        // 批次已确定（用户确认或重做入口）：付费闸门在此拦截（collect 免费），未解锁批次 → 402
+        String gateMode = (mode == null || mode.isBlank()) ? task.getMode() : mode;
+        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin(), gateMode);
         List<String> paperNames = answerLibService.paperNames(batch);
         if (paperNames.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批次不存在: " + batch);

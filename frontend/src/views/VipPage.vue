@@ -313,6 +313,7 @@ onBeforeUnmount(stopPolling)
           <h1>解锁全部题库，<em>一次付费长期有效</em></h1>
           <p>
             单日卡按日期解锁，一个日期只需付一次钱；月卡期内无限做题。
+            答案中心的答案浏览与下载<b>永远免费</b>，付费功能只有自动做题。
             <template v-if="products?.activity">
               限时活动「{{ products.activity.name }}」进行中，全场
               <strong>{{ (products.activity.discountPercent / 10).toFixed(1) }} 折</strong>。
@@ -382,9 +383,9 @@ onBeforeUnmount(stopPolling)
               当前题库日期都已解锁，直接回做题台开做即可
             </p>
             <ul class="pc-list">
-              <li><el-icon><Check /></el-icon>该日期下所有卷子无限次重做</li>
+              <li><el-icon><Check /></el-icon>该日期下所有卷子自动做题、无限次重做</li>
               <li><el-icon><Check /></el-icon>一次付费，永久解锁该日期</li>
-              <li><el-icon><Check /></el-icon>自动作答 + 答案采集入库</li>
+              <li><el-icon><Check /></el-icon>取答案不限；答案中心下载永远免费</li>
             </ul>
             <el-button
               type="warning"

@@ -49,7 +49,7 @@ client.interceptors.response.use(
     } else if (status === 402) {
       // VIP 付费闸门：后端 VipExceptionHandler 返回 {code:"VIP_REQUIRED", batch,...}
       const vip = data as { batch?: string } | undefined
-      const msg = serverMsg || '该日期尚未解锁，需要付费后才能做题'
+      const msg = serverMsg || '该日期尚未解锁：解锁后才能自动做题（取答案与答案下载免费）'
       if (!url.startsWith('/vip/')) {
         ElMessage.warning(msg)
         redirectToVip?.(vip?.batch ?? '')

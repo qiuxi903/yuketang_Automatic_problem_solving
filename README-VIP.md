@@ -14,6 +14,7 @@
 | 限时活动 | 窗口期内下单自动折扣，与优惠码取最优、不叠加 |
 | 雨课堂绑定 | 平台账号 ↔ 雨课堂账号 1:1，首次扫码自动绑定，防帮他人做题；解绑需管理员 |
 | 付费页 | `/vip`：定价卡、收款码支付弹层（倒计时+轮询）、兑换中心、订单记录 |
+| 收费边界 | **只有「自动做题」收费**；「取答案」（collect）与答案中心的浏览/导出永远免费 |
 | 运营后台 | `/admin/vip`：订单核销、优惠码、支付与活动设置、用户权益与绑定管理 |
 
 ## 收款渠道（后台可切换，`LISTEN` 为推荐主力）
@@ -65,8 +66,8 @@ VIP 版会话/任务/订单数据全在 `ykt-vip` 库，互不串。
 
 ## 端到端链路（闸门位置）
 
-- 用户确认批次（`POST /api/tasks/{id}/batch`）或带批次建任务时 → `VipService.checkBatchAccess`
-  → 月卡在期 / 该批次有 DATE 权益 → 放行；否则 **HTTP 402** `{code:"VIP_REQUIRED", batch, ...}`
+- 用户确认批次（`POST /api/tasks/{id}/batch`）或带批次建任务时 → `VipService.checkBatchAccess(userId, batch, admin, mode)`
+  → mode=collect（取答案）免费放行；月卡在期 / 该批次有 DATE 权益 → 放行；否则 **HTTP 402** `{code:"VIP_REQUIRED", batch, ...}`
 - 前端 axios 拦截器统一捕 402 → 弹提示跳 `/vip?batch=日期`（付费页自动预选该日期）
 - Agent 领取任务前再核一次（权益被撤销的兜底）；管理员角色不受限
 - 扫码登录回传账号名 → `VipService.onScanLogin`：未绑定自动 1:1 绑定；不符/被他绑 → 会话 REJECTED，任务中止并展示原因

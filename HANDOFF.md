@@ -24,7 +24,8 @@
 - 优惠码 `VipCoupon` 四类：DISCOUNT（下单填，与活动取最优）/ DATE_PASS（兑换选日期）/ MONTH_PASS / QUOTA；perUserLimit 防刷
 
 ### 闸门（402）
-- `TaskService.create/setBatch`：`VipService.checkBatchAccess` → 未解锁抛 `VipRequiredException` → `VipExceptionHandler` 返 **402** `{code:"VIP_REQUIRED", batch, datePassPriceFen, monthPriceFen}`
+- **收费边界：只有自动做题（mode=answer）收费**；取答案（collect）与答案中心浏览/导出永远免费（Community/Answer/Paper 控制器零 VIP 引用）
+- `TaskService.create/setBatch/claim`：`VipService.checkBatchAccess(..., mode)` → 未解锁且 answer 模式抛 `VipRequiredException` → `VipExceptionHandler` 返 **402** `{code:"VIP_REQUIRED", batch, datePassPriceFen, monthPriceFen}`
 - `agentNext/claim` 兜底再核；ADMIN 放行；`ykt.vip.enforce=false` 全局关闭（开源用户可当免费版跑）
 - 前端 `api/client.ts` 拦 402 → 跳 `/vip?batch=日期`（VipPage 预选）
 
@@ -46,8 +47,8 @@
 ## 三、已验证 / 未验证（诚实清单）
 
 - ✅ `mvn clean package`（Java 21）通过；`npm run build`（vue-tsc）通过；agent py 编译通过
-- ✅ 端到端冒烟 **16/16**（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
-- ✅ 浏览器视觉验证：/vip 付费页、支付弹层（¥3.73 含尾数、倒计时）、/admin/vip 四页签+订单列表，亮色正常
+- ✅ 端到端冒烟 **17/17**（含 collect 免费放行用例）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
+- ✅ 浏览器视觉验证：/vip 亮色/暗色/移动端(375px) + 支付弹层移动端 + /admin/vip 移动端卡片视图，UI 与设计系统 v2 统一（var() 令牌）
 - ❌ NOT RUN：虎皮椒渠道联调（无凭据）；pay-listener 对真实微信收款的校准（`--probe-uia` 待用户跑）；
   雨课堂真实扫码的绑定全链路（需真人扫码终验）；暗色/移动端只过了代码层（var() 令牌+断点），未截图细验
 

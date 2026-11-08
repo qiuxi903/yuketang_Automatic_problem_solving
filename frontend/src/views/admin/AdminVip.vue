@@ -1181,5 +1181,8 @@ onMounted(() => void loadTab(activeTab.value))
   .match-box {
     flex-direction: column;
   }
+  .match-box .el-button {
+    align-self: flex-start;
+  }
 }
 </style>

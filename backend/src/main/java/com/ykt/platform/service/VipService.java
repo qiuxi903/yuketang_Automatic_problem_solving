@@ -164,13 +164,20 @@ public class VipService {
     /**
      * 付费闸门：enforce 关闭或管理员直接放行；月卡在期或持有该批次单日权益放行；
      * 否则抛 {@link VipRequiredException}（→ 402，前端跳付费页）。
+     *
+     * 收费边界：只有「自动做题」（mode=answer，含缺省）收费；
+     * 「取答案」（mode=collect）与答案中心的浏览/下载永远免费。
      */
     @Transactional(readOnly = true)
-    public void checkBatchAccess(Long userId, String batch, boolean admin) {
+    public void checkBatchAccess(Long userId, String batch, boolean admin, String mode) {
         if (!properties.enforce()) {
             return;
         }
         if (admin || batch == null || batch.isBlank()) {
+            return;
+        }
+        // collect=只采答案不自动作答：免费放行
+        if ("collect".equalsIgnoreCase(mode)) {
             return;
         }
         if (batchUnlocked(userId, batch)) {
