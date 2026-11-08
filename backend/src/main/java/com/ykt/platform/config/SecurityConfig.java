@@ -37,6 +37,8 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR, DispatcherType.FORWARD).permitAll()
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/auth/**", "/api/agent/**", "/api/answer/**", "/ws/**", "/h2-console/**").permitAll()
+                        // 支付回调：鉴权靠 listenToken（监听工具）与虎皮椒验签，不走 JWT
+                        .requestMatchers("/api/pay/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         // 管理员后台接口仅 ADMIN 可访问
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")

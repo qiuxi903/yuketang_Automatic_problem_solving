@@ -2,7 +2,7 @@ package com.ykt.platform.dto;
 
 import java.time.Instant;
 
-/** 会话详情：供前端展示扫码状态、二维码、批次/模式与截止时间。 */
+/** 会话详情：供前端展示扫码状态、二维码、批次/模式与截止时间；message 携带 REJECTED 等补充说明。 */
 public record SessionDetailResponse(
         Long sessionId,
         String status,
@@ -11,5 +11,6 @@ public record SessionDetailResponse(
         String batch,
         String mode,
         Instant expireAt,
-        Instant createdAt) {
+        Instant createdAt,
+        String message) {
 }

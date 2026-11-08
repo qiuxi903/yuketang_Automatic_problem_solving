@@ -11,9 +11,10 @@ spring:
   config:
     import: "optional:file:./config/local.yml"
   # P0 使用 H2 本地文件库：数据落在 backend\data\，重启不丢（注册账号、任务与采集的答案均保留）
+  # VIP 分支用独立库名 ykt-vip：与 main 分支的免费版数据完全隔离，两个版本互不串数据
   # P1 通过 spring.profiles.active=mysql 切换到 MySQL
   datasource:
-    url: jdbc:h2:file:./data/ykt;MODE=MySQL;LOCK_TIMEOUT=15000
+    url: jdbc:h2:file:./data/ykt-vip;MODE=MySQL;LOCK_TIMEOUT=15000
     driver-class-name: org.h2.Driver
     username: sa
     password: ""
@@ -44,6 +45,16 @@ ykt:
     # 启动时引导创建的管理员账号：首次部署请改掉默认密码（或用环境变量 YKT_ADMIN_PASSWORD 覆盖）
     username: admin
     password: "${YKT_ADMIN_PASSWORD:admin123}"
+  vip:
+    # 付费闸门总开关：false = VIP 分支按免费版运行（所有批次放行）
+    enforce: true
+    # 雨课堂账号 1:1 绑定开关：false 时扫码登录不做绑定校验
+    bind-required: true
+    # 新用户注册赠送的免费解锁次数（存量用户启动时按同值补建）
+    free-quota-on-register: 1
+    # 虎皮椒个人支付接口凭据：填入 local.yml 或环境变量后，后台把收款渠道切到 XUNHU 即启用
+    xunhu-appid: "${YKT_XUNHU_APPID:}"
+    xunhu-secret: "${YKT_XUNHU_SECRET:}"
 
 logging:
   level:

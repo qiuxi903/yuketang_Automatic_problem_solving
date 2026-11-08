@@ -27,6 +27,9 @@ import com.ykt.platform.entity.TaskStatus;
 import com.ykt.platform.repository.PaperRepository;
 import com.ykt.platform.repository.TaskItemRepository;
 import com.ykt.platform.repository.TaskRepository;
+import com.ykt.platform.security.AuthUser;
+import com.ykt.platform.security.SecurityUtil;
+import com.ykt.platform.vip.VipRequiredException;
 import com.ykt.platform.ws.TaskWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,6 +61,7 @@ public class TaskService {
     private final TaskWebSocketHandler webSocketHandler;
     private final ObjectMapper objectMapper;
     private final CommunityService communityService;
+    private final VipService vipService;
 
     /** 浏览器模式：任务 → 最近一帧实时截图（内存缓存，重启即失效，无需持久化）。 */
     private final Map<Long, TaskFrameResponse> frameCache = new ConcurrentHashMap<>();
@@ -70,7 +74,8 @@ public class TaskService {
                        TaskQueue taskQueue,
                        TaskWebSocketHandler webSocketHandler,
                        ObjectMapper objectMapper,
-                       CommunityService communityService) {
+                       CommunityService communityService,
+                       VipService vipService) {
         this.taskRepository = taskRepository;
         this.taskItemRepository = taskItemRepository;
         this.paperRepository = paperRepository;
@@ -80,6 +85,7 @@ public class TaskService {
         this.webSocketHandler = webSocketHandler;
         this.objectMapper = objectMapper;
         this.communityService = communityService;
+        this.vipService = vipService;
     }
 
     /**
@@ -121,6 +127,8 @@ public class TaskService {
         }
         // 批次可后置：为空时先扫码登录，待 Agent 回传账号作业清单后再由用户确认批次
         String batch = request.batch() == null || request.batch().isBlank() ? null : request.batch();
+        // VIP 付费闸门：批次已知（含重做任务）时先校验解锁态，未解锁 → 402 跳付费页
+        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin());
         List<String> paperNames = batch == null ? List.of() : answerLibService.paperNames(batch);
         // 重做任务：只做指定卷子（通常来自上一任务「取答案未做」的弹窗一键重做）
         List<String> redo = request.redoPapers() == null ? List.of() : request.redoPapers().stream()
@@ -132,6 +140,8 @@ public class TaskService {
         task.setBatch(batch);
         task.setReuseYkt(request.reuseYkt() == null || request.reuseYkt().isBlank()
                 ? null : request.reuseYkt());
+        // VIP 绑定校验：免扫码续做必须用自己绑定的雨课堂账号
+        vipService.checkReuseAllowed(userId, task.getReuseYkt());
         task.setMode(request.mode() == null || request.mode().isBlank() ? "answer" : request.mode());
         task.setStatus(TaskStatus.PENDING);
         try {
@@ -259,6 +269,16 @@ public class TaskService {
                 || status == TaskStatus.PAUSED;
     }
 
+    /** VIP 闸门的免检通行判定：管理员不受付费限制（测试/运营方便）。 */
+    private boolean currentUserIsAdmin() {
+        try {
+            AuthUser user = SecurityUtil.currentUser();
+            return user != null && "ADMIN".equalsIgnoreCase(user.role());
+        } catch (IllegalStateException ex) {
+            return false;
+        }
+    }
+
     /** 运行中的任务快照：Agent 启动时收养「上次进程崩溃时正在执行」的孤儿任务。 */
     public List<TaskSnapshot> runningTasks() {
         return taskRepository.findByStatus(TaskStatus.RUNNING).stream()
@@ -275,7 +295,10 @@ public class TaskService {
             if (task == null || task.getStatus() != TaskStatus.PENDING) {
                 continue;
             }
-            return claim(task);
+            TaskSnapshot snapshot = claim(task);
+            if (snapshot != null) {
+                return snapshot;
+            }
         }
         // 内存队列不是事实来源：重启后队列清空，靠数据库把遗留的 PENDING 任务捞回来
         return taskRepository.findFirstByStatusOrderByIdAsc(TaskStatus.PENDING)
@@ -284,6 +307,19 @@ public class TaskService {
     }
 
     private TaskSnapshot claim(Task task) {
+        // 闸门兜底：创建/确认批次之后权益被撤销（管理员撤销、退款）时，领取前再拦一次
+        if (task.getBatch() != null) {
+            try {
+                vipService.checkBatchAccess(task.getUserId(), task.getBatch(), false);
+            } catch (VipRequiredException ex) {
+                taskQueue.remove(task.getId());
+                task.setStatus(TaskStatus.FAILED);
+                task.setMessage("付费校验未通过：" + ex.getMessage());
+                taskRepository.save(task);
+                broadcast(task.getId());
+                return null;
+            }
+        }
         taskQueue.remove(task.getId());
         task.setStatus(TaskStatus.RUNNING);
         task.setMessage("Agent 已领取，准备打开雨课堂");
@@ -340,6 +376,8 @@ public class TaskService {
         if (task.getStatus() != TaskStatus.WAITING_BATCH) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "当前任务状态不允许选择批次");
         }
+        // 批次已确定（用户确认或重做入口）：付费闸门在此拦截，未解锁批次 → 402
+        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin());
         List<String> paperNames = answerLibService.paperNames(batch);
         if (paperNames.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批次不存在: " + batch);

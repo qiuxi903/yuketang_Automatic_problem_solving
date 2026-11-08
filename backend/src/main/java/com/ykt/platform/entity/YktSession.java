@@ -29,6 +29,10 @@ public class YktSession {
     @Lob
     private String sessionKey;
 
+    /** 状态补充说明（VIP 绑定拒绝原因等）。 */
+    @Column(length = 256)
+    private String message;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     private SessionStatus status = SessionStatus.WAITING_SCAN;
@@ -76,6 +80,14 @@ public class YktSession {
 
     public void setSessionKey(String sessionKey) {
         this.sessionKey = sessionKey;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public SessionStatus getStatus() {

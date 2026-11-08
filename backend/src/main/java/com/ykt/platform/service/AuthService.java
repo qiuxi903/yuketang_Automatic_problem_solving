@@ -25,13 +25,15 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final InviteService inviteService;
+    private final VipService vipService;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       JwtService jwtService, InviteService inviteService) {
+                       JwtService jwtService, InviteService inviteService, VipService vipService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.inviteService = inviteService;
+        this.vipService = vipService;
     }
 
     @Transactional
@@ -62,6 +64,8 @@ public class AuthService {
         // 注册入口只产生普通用户；管理员账号由 AdminBootstrap 引导创建
         user.setRole("USER");
         User saved = userRepository.save(user);
+        // VIP：注册即建 VIP 账户并赠送免费体验额度（次数 = ykt.vip.free-quota-on-register）
+        vipService.account(saved.getId());
         return new RegisterResponse(saved.getId(), saved.getUsername());
     }
 

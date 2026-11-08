@@ -18,9 +18,11 @@ import java.time.Instant;
 public class SessionService {
 
     private final YktSessionRepository sessionRepository;
+    private final VipService vipService;
 
-    public SessionService(YktSessionRepository sessionRepository) {
+    public SessionService(YktSessionRepository sessionRepository, VipService vipService) {
         this.sessionRepository = sessionRepository;
+        this.vipService = vipService;
     }
 
     @Transactional
@@ -42,7 +44,7 @@ public class SessionService {
         return new SessionDetailResponse(session.getId(), session.getStatus().name(),
                 session.getQrcode(), session.getYktName(),
                 session.getBatch(), session.getMode(),
-                session.getExpireAt(), session.getCreatedAt());
+                session.getExpireAt(), session.getCreatedAt(), session.getMessage());
     }
 
     @Transactional
@@ -82,11 +84,20 @@ public class SessionService {
     @Transactional
     public void updateStatus(Long sessionId, String status, String yktName) {
         YktSession session = requireSession(sessionId);
+        // VIP 绑定校验：扫码成功读到雨课堂账号名时做 1:1 绑定核验（自动首绑 / 不符拒绝）
+        String rejectReason = null;
+        if (yktName != null && !yktName.isBlank()
+                && SessionStatus.SCANNED.name().equalsIgnoreCase(status)) {
+            rejectReason = vipService.onScanLogin(session.getUserId(), yktName);
+        }
         if (status != null && !status.isBlank()) {
-            session.setStatus(parseStatus(status));
+            session.setStatus(rejectReason != null ? SessionStatus.REJECTED : parseStatus(status));
         }
         if (yktName != null && !yktName.isBlank()) {
             session.setYktName(yktName);
+        }
+        if (rejectReason != null) {
+            session.setMessage(rejectReason);
         }
         sessionRepository.save(session);
     }
