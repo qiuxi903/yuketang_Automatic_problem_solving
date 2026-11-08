@@ -4,9 +4,15 @@ import { useAuthStore } from '@/store/auth'
 
 // 由 main.ts 注入跳转逻辑，避免 client -> router -> store -> api 的循环依赖
 let redirectToLogin: (() => void) | null = null
+let redirectToVip: ((batch: string) => void) | null = null
 
 export function setUnauthorizedHandler(handler: () => void) {
   redirectToLogin = handler
+}
+
+/** 付费闸门 402 的统一跳转：带批次参数去付费页（VipPage 会预选该日期）。 */
+export function setVipRequiredHandler(handler: (batch: string) => void) {
+  redirectToVip = handler
 }
 
 // 拦截器已把响应体解包，所以业务侧拿到的直接是契约里的出参对象
@@ -40,6 +46,16 @@ client.interceptors.response.use(
       auth.logout()
       warnExpiredOnce()
       redirectToLogin?.()
+    } else if (status === 402) {
+      // VIP 付费闸门：后端 VipExceptionHandler 返回 {code:"VIP_REQUIRED", batch,...}
+      const vip = data as { batch?: string } | undefined
+      const msg = serverMsg || '该日期尚未解锁，需要付费后才能做题'
+      if (!url.startsWith('/vip/')) {
+        ElMessage.warning(msg)
+        redirectToVip?.(vip?.batch ?? '')
+      } else {
+        ElMessage.error(msg)
+      }
     } else {
       ElMessage.error(serverMsg || error.message || '请求失败，请稍后重试')
     }

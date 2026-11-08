@@ -43,6 +43,7 @@ const SESSION: Record<SessionStatus, Meta> = {
   SCANNED: { label: '已扫码', tone: 'ok' },
   EXPIRED: { label: '二维码过期', tone: 'danger' },
   CLOSED: { label: '已关闭', tone: 'neutral' },
+  REJECTED: { label: '绑定校验未通过', tone: 'danger' },
 }
 
 export function taskMeta(status: TaskStatus): Meta {

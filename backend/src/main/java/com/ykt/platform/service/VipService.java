@@ -38,7 +38,9 @@ import org.springframework.web.server.ResponseStatusException;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -211,6 +213,20 @@ public class VipService {
                 settings.getPayQrAlipay() != null && !settings.getPayQrAlipay().isBlank(),
                 effectiveActivity(Instant.now(), "ALL"),
                 batches);
+    }
+
+    /** 收款码图片（base64 dataURL），付费页支付弹层展示用。 */
+    @Transactional(readOnly = true)
+    public Map<String, String> payQrImages() {
+        VipSettings settings = settings();
+        Map<String, String> out = new LinkedHashMap<>();
+        out.put("wechat", blankToNull(settings.getPayQrWechat()));
+        out.put("alipay", blankToNull(settings.getPayQrAlipay()));
+        return out;
+    }
+
+    private static String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     // ---------- 订单 ----------

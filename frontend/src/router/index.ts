@@ -11,6 +11,12 @@ const router = createRouter({
       meta: { public: true, title: '登录' },
     },
     {
+      path: '/vip',
+      name: 'vip',
+      component: () => import('@/views/VipPage.vue'),
+      meta: { title: 'VIP 会员中心' },
+    },
+    {
       path: '/',
       component: () => import('@/layouts/ConsoleLayout.vue'),
       redirect: { name: 'console' },
@@ -62,6 +68,12 @@ const router = createRouter({
               name: 'admin-invites',
               component: () => import('@/views/admin/AdminInvites.vue'),
               meta: { title: '管理后台 · 邀请码', requiresAdmin: true },
+            },
+            {
+              path: 'vip',
+              name: 'admin-vip',
+              component: () => import('@/views/admin/AdminVip.vue'),
+              meta: { title: '管理后台 · VIP 运营', requiresAdmin: true },
             },
             {
               path: 'settings',

@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   CaretBottom,
+  Coin,
   Collection,
   DataLine,
   Document,
@@ -78,6 +79,10 @@ function go(name: string) {
   router.push({ name })
 }
 
+function goVip() {
+  router.push({ path: '/vip' })
+}
+
 const activeTab = computed(() => {
   if (route.path.startsWith('/admin')) return 'admin'
   if (route.path.startsWith('/community')) return 'community'
@@ -123,6 +128,11 @@ function handleLogout() {
           @click="toggleTheme"
         >
           <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
+        </button>
+
+        <button class="vip-entry" type="button" title="VIP 会员中心" @click="goVip">
+          <el-icon><Coin /></el-icon>
+          <span class="mobile-hide">VIP</span>
         </button>
 
         <button class="mytasks" type="button" @click="openTasks">
@@ -248,6 +258,15 @@ function handleLogout() {
       >
         <el-icon><Monitor /></el-icon>
         <span>做题</span>
+      </button>
+      <button
+        class="tabbar-item"
+        :class="{ 'is-active': route.path.startsWith('/vip') }"
+        type="button"
+        @click="goVip"
+      >
+        <el-icon><Coin /></el-icon>
+        <span>VIP</span>
       </button>
       <button
         class="tabbar-item"
@@ -425,6 +444,30 @@ function handleLogout() {
   place-items: center;
 }
 
+/* —— VIP 入口：琥珀金小徽章 —— */
+.vip-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--amber);
+  border-radius: var(--r-sm);
+  background: var(--amber-050);
+  color: var(--amber);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+.vip-entry:hover {
+  color: #fff;
+  background: var(--amber);
+  box-shadow: var(--shadow-sm);
+}
+
 .user-chip {
   display: flex;
   align-items: center;
@@ -496,6 +539,10 @@ function handleLogout() {
   .mytasks {
     height: 38px;
     padding: 0 10px;
+  }
+  .vip-entry {
+    height: 38px;
+    padding: 0 11px;
   }
   .conn {
     display: none;

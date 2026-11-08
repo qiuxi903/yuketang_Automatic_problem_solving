@@ -248,9 +248,14 @@ export const useConsoleStore = defineStore('console', () => {
         const previous = session.value.status
         session.value = info
         if (info.status !== previous) {
-          log(info.status === 'SCANNED' ? 'ok' : info.status === 'EXPIRED' ? 'danger' : 'info',
-            `扫码状态：${sessionMeta(info.status).label}`,
-            info.status === 'SCANNED' && info.yktName ? `雨课堂账号 ${info.yktName}` : undefined)
+          if (info.status === 'REJECTED') {
+            // VIP 绑定校验拒绝：详细原因在 message（账号不符 / 已被他人绑定）
+            log('danger', `扫码被拒绝：${sessionMeta(info.status).label}`, info.message ?? undefined)
+          } else {
+            log(info.status === 'SCANNED' ? 'ok' : info.status === 'EXPIRED' ? 'danger' : 'info',
+              `扫码状态：${sessionMeta(info.status).label}`,
+              info.status === 'SCANNED' && info.yktName ? `雨课堂账号 ${info.yktName}` : undefined)
+          }
         }
         if (info.status === 'WAITING_SCAN') return
         stopPolling()

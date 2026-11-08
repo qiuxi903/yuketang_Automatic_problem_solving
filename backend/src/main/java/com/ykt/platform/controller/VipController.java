@@ -41,6 +41,12 @@ public class VipController {
         return vipService.products(SecurityUtil.currentUserId());
     }
 
+    /** 收款码图片（base64 dataURL）：{wechat: ..., alipay: ...}，未上传的为 null。 */
+    @GetMapping("/pay-qr")
+    public Map<String, String> payQr() {
+        return vipService.payQrImages();
+    }
+
     /** 创建订单（DATE_PASS 需 targetBatch；可带折扣码）。 */
     @PostMapping("/orders")
     public VipOrderView createOrder(@RequestBody VipOrderCreateRequest request) {

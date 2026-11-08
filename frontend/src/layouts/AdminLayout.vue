@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Collection, Odometer, Postcard, Setting, Tickets, User } from '@element-plus/icons-vue'
+import { Collection, Coin, Odometer, Postcard, Setting, Tickets, User } from '@element-plus/icons-vue'
 import StatusPill from '@/components/ui/StatusPill.vue'
 
 const route = useRoute()
@@ -12,6 +12,7 @@ const navItems = [
   { name: 'admin-tasks', label: '任务管理', icon: Tickets, hint: '全部作答任务' },
   { name: 'admin-library', label: '答案库', icon: Collection, hint: '批次与试卷' },
   { name: 'admin-invites', label: '邀请码', icon: Postcard, hint: '注册邀请码管理' },
+  { name: 'admin-vip', label: 'VIP 运营', icon: Coin, hint: '订单/优惠码/权益' },
   { name: 'admin-settings', label: '系统设置', icon: Setting, hint: '兜底答题 API' },
 ]
 

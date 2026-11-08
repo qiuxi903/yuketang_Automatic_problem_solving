@@ -1,6 +1,6 @@
 // 字段与 docs/接口契约.md 严格一致，改名会导致前后端对不上
 
-export type SessionStatus = 'WAITING_SCAN' | 'SCANNED' | 'EXPIRED' | 'CLOSED'
+export type SessionStatus = 'WAITING_SCAN' | 'SCANNED' | 'EXPIRED' | 'CLOSED' | 'REJECTED'
 export type TaskStatus =
   | 'PENDING'
   | 'RUNNING'
@@ -39,6 +39,8 @@ export interface SessionInfo {
   mode: TaskMode | null
   expireAt: string | null
   createdAt: string | null
+  /** VIP 绑定校验拒绝原因等补充说明 */
+  message?: string | null
 }
 
 export interface PaperMeta {
