@@ -48,3 +48,6 @@ backend/config/local.yml
 start-dev.ps1
 AI协作规则.md
 docs/
+
+# pay-listener 本地配置（含监听令牌）
+pay-listener/config.ini

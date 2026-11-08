@@ -11,6 +11,7 @@ import com.ykt.platform.dto.AgentFrameRequest;
 import com.ykt.platform.dto.AgentPapersRequest;
 import com.ykt.platform.dto.AgentProgressRequest;
 import com.ykt.platform.dto.AgentQuestionsRequest;
+import com.ykt.platform.dto.AgentSessionStatusResponse;
 import com.ykt.platform.dto.BatchDecisionResponse;
 import com.ykt.platform.dto.BatchOptionsResponse;
 import com.ykt.platform.dto.CreateTaskRequest;
@@ -491,8 +492,7 @@ public class TaskService {
     }
 
     @Transactional
-    public OkResponse updateQrcode(Long taskId, String qrcode) {
-        Task task = require(taskId);
+    public OkResponse updateQrcode(Long taskId, String qrcode) {        Task task = require(taskId);
         if (task.getSessionId() != null) {
             sessionService.updateQrcode(task.getSessionId(), qrcode);
         }
@@ -500,12 +500,17 @@ public class TaskService {
     }
 
     @Transactional
-    public OkResponse updateSessionStatus(Long taskId, String status, String yktName) {
+    public AgentSessionStatusResponse updateSessionStatus(Long taskId, String status, String yktName) {
         Task task = require(taskId);
+        String reason = null;
         if (task.getSessionId() != null) {
-            sessionService.updateStatus(task.getSessionId(), status, yktName);
+            reason = sessionService.updateStatus(task.getSessionId(), status, yktName);
         }
-        return OkResponse.of();
+        // VIP 绑定校验拒绝：让 Agent 立即中止任务，前端会话处展示理由
+        if (reason != null) {
+            return new AgentSessionStatusResponse(true, "REJECTED", reason);
+        }
+        return AgentSessionStatusResponse.of(status == null ? "SCANNED" : status.toUpperCase());
     }
 
     @Transactional

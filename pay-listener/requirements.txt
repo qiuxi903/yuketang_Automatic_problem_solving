@@ -1,0 +1,8 @@
+requests
+uiautomation
+# —— 以下仅 ocr / auto（自动降级到 ocr）策略需要 ——
+rapidocr-onnxruntime
+pillow
+pywin32
+# —— 以下仅 wcf 策略需要（仅微信 3.9.x，有封号风险，默认别装） ——
+# wcferry

@@ -81,8 +81,13 @@ public class SessionService {
         sessionRepository.save(session);
     }
 
+    /**
+     * 回传会话状态；扫码成功（SCANNED）时做 VIP 绑定校验。
+     *
+     * @return null = 通过；非 null = 拒绝理由（调用方应把会话状态置为 REJECTED）
+     */
     @Transactional
-    public void updateStatus(Long sessionId, String status, String yktName) {
+    public String updateStatus(Long sessionId, String status, String yktName) {
         YktSession session = requireSession(sessionId);
         // VIP 绑定校验：扫码成功读到雨课堂账号名时做 1:1 绑定核验（自动首绑 / 不符拒绝）
         String rejectReason = null;
@@ -100,6 +105,7 @@ public class SessionService {
             session.setMessage(rejectReason);
         }
         sessionRepository.save(session);
+        return rejectReason;
     }
 
     public YktSession findOwned(Long userId, Long id) {

@@ -10,6 +10,7 @@ import com.ykt.platform.dto.AgentProgressRequest;
 import com.ykt.platform.dto.AgentQrcodeRequest;
 import com.ykt.platform.dto.AgentQuestionsRequest;
 import com.ykt.platform.dto.AgentSessionStatusRequest;
+import com.ykt.platform.dto.AgentSessionStatusResponse;
 import com.ykt.platform.dto.BatchDecisionResponse;
 import com.ykt.platform.dto.OkResponse;
 import com.ykt.platform.dto.TaskSnapshot;
@@ -52,7 +53,7 @@ public class AgentController {
     }
 
     @PostMapping("/{id}/session-status")
-    public OkResponse sessionStatus(@PathVariable Long id, @RequestBody AgentSessionStatusRequest request) {
+    public AgentSessionStatusResponse sessionStatus(@PathVariable Long id, @RequestBody AgentSessionStatusRequest request) {
         return taskService.updateSessionStatus(id, request.status(), request.yktName());
     }
 
