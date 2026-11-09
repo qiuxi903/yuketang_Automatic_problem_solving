@@ -45,4 +45,16 @@ public class JwtService {
         String role = claims.get("role", String.class);
         return new AuthUser(userId, username, role == null ? "USER" : role);
     }
+
+    /** 解析 token 的签发时间（解析失败返回 null）。 */
+    public java.time.Instant issuedAt(String token) {
+        try {
+            Claims claims = Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload();
+            return claims.getIssuedAt() != null ? claims.getIssuedAt().toInstant() : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
 }

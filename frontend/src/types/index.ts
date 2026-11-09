@@ -282,6 +282,13 @@ export interface AdminUserView {
   taskCount: number
   runningCount: number
   createdAt: string
+  disabled: boolean
+  lastLoginIp: string | null
+  lastLoginLocation: string | null
+  lastLoginAt: string | null
+  /** 累计充值（分） */
+  paidTotalFen: number
+  paidOrders: number
 }
 
 export interface AdminTaskView {

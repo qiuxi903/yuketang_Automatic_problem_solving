@@ -22,6 +22,8 @@ export default defineConfig({
       '/api': {
         target: `http://localhost:${backendPort}`,
         changeOrigin: true,
+        // 透传真实客户端 IP（X-Forwarded-For）：登录日志/限流据此记录来源
+        xfwd: true,
       },
       '/ws': {
         target: `ws://localhost:${backendPort}`,

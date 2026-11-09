@@ -4,8 +4,11 @@ import com.ykt.platform.dto.LoginRequest;
 import com.ykt.platform.dto.LoginResponse;
 import com.ykt.platform.dto.RegisterRequest;
 import com.ykt.platform.dto.RegisterResponse;
+import com.ykt.platform.entity.LoginLog;
 import com.ykt.platform.entity.User;
+import com.ykt.platform.repository.LoginLogRepository;
 import com.ykt.platform.repository.UserRepository;
+import com.ykt.platform.util.ClientIp;
 
 import com.ykt.platform.security.JwtService;
 import org.springframework.http.HttpStatus;
@@ -26,14 +29,27 @@ public class AuthService {
     private final JwtService jwtService;
     private final InviteService inviteService;
     private final VipService vipService;
+    private final LoginLogRepository loginLogRepository;
+    private final IpRegionService ipRegionService;
+    private final jakarta.servlet.http.HttpServletRequest httpRequest;
+
+    /** 登录失败锁定：同 IP+用户名 10 分钟内 5 次失败即锁（防爆破，内存态重启即清）。 */
+    private final java.util.Map<String, java.util.Deque<Long>> failedLogins = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final int FAIL_LIMIT = 5;
+    private static final long FAIL_WINDOW_MS = 10 * 60 * 1000L;
 
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       JwtService jwtService, InviteService inviteService, VipService vipService) {
+                       JwtService jwtService, InviteService inviteService, VipService vipService,
+                       LoginLogRepository loginLogRepository, IpRegionService ipRegionService,
+                       jakarta.servlet.http.HttpServletRequest httpRequest) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.inviteService = inviteService;
         this.vipService = vipService;
+        this.loginLogRepository = loginLogRepository;
+        this.ipRegionService = ipRegionService;
+        this.httpRequest = httpRequest;
     }
 
     @Transactional
@@ -70,13 +86,84 @@ public class AuthService {
     }
 
     public LoginResponse login(LoginRequest request) {
-        User user = userRepository.findByUsername(request.username())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误"));
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+        String ip = ClientIp.resolve(httpRequest);
+        String location = ipRegionService.locate(ip);
+        String username = request.username() == null ? "" : request.username().trim();
+        // 失败锁定前置：锁定期内直接拒绝，不给继续验密的机会
+        if (isLocked(ip, username)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "登录失败次数过多，请 10 分钟后再试");
+        }
+        User user = userRepository.findByUsername(username).orElse(null);
+        if (user == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            recordLoginLog(null, username, ip, location, false, "用户名或密码错误");
+            checkAndLockFailures(ip, username);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
+        }
+        if (user.isDisabled()) {
+            recordLoginLog(user, username, ip, location, false, "账号已被禁用");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号已被禁用，请联系管理员");
         }
         String role = user.getRole() == null || user.getRole().isBlank() ? "USER" : user.getRole();
         String token = jwtService.generate(user.getId(), user.getUsername(), role);
+        // 最近登录信息 + 登录日志
+        user.setLastLoginIp(ip);
+        user.setLastLoginLocation(location);
+        user.setLastLoginAt(java.time.Instant.now());
+        userRepository.save(user);
+        recordLoginLog(user, username, ip, location, true, null);
         return new LoginResponse(token, user.getUsername(), role);
+    }
+
+    private void recordLoginLog(User user, String username, String ip, String location,
+                                boolean success, String message) {
+        try {
+            if (user == null) {
+                // 查无此用户的失败不入库（避免垃圾数据）；爆破防护由内存锁定承担
+                return;
+            }
+            LoginLog logEntry = new LoginLog();
+            logEntry.setUserId(user.getId());
+            logEntry.setUsername(username);
+            logEntry.setIp(ip);
+            logEntry.setLocation(location);
+            logEntry.setUserAgent(nvl(httpRequest.getHeader("User-Agent")));
+            logEntry.setSuccess(success);
+            logEntry.setMessage(message);
+            loginLogRepository.save(logEntry);
+        } catch (Exception ex) {
+            // 日志失败不影响登录主流程
+        }
+    }
+
+    private static String nvl(String v) {
+        return v == null ? "" : v.substring(0, Math.min(v.length(), 500));
+    }
+
+    private void checkAndLockFailures(String ip, String username) {
+        String key = ip + "|" + username;
+        long now = System.currentTimeMillis();
+        java.util.Deque<Long> window = failedLogins.computeIfAbsent(key, k -> new java.util.ArrayDeque<>());
+        synchronized (window) {
+            while (!window.isEmpty() && now - window.peekFirst() > FAIL_WINDOW_MS) {
+                window.pollFirst();
+            }
+            window.addLast(now);
+        }
+    }
+
+    private boolean isLocked(String ip, String username) {
+        String key = ip + "|" + username;
+        long now = System.currentTimeMillis();
+        java.util.Deque<Long> window = failedLogins.get(key);
+        if (window == null) {
+            return false;
+        }
+        synchronized (window) {
+            while (!window.isEmpty() && now - window.peekFirst() > FAIL_WINDOW_MS) {
+                window.pollFirst();
+            }
+            return window.size() >= FAIL_LIMIT;
+        }
     }
 }

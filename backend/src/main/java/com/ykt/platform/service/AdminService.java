@@ -41,6 +41,9 @@ public class AdminService {
     private final QuestionRepository questionRepository;
     private final AnswerLibService answerLibService;
     private final VipAdminService vipAdminService;
+    private final com.ykt.platform.repository.VipOrderRepository orderRepository;
+    private final com.ykt.platform.repository.LoginLogRepository loginLogRepository;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     public AdminService(UserRepository userRepository,
                         TaskRepository taskRepository,
@@ -48,7 +51,10 @@ public class AdminService {
                         PaperRepository paperRepository,
                         QuestionRepository questionRepository,
                         AnswerLibService answerLibService,
-                        VipAdminService vipAdminService) {
+                        VipAdminService vipAdminService,
+                        com.ykt.platform.repository.VipOrderRepository orderRepository,
+                        com.ykt.platform.repository.LoginLogRepository loginLogRepository,
+                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.taskRepository = taskRepository;
         this.sessionRepository = sessionRepository;
@@ -56,6 +62,9 @@ public class AdminService {
         this.questionRepository = questionRepository;
         this.answerLibService = answerLibService;
         this.vipAdminService = vipAdminService;
+        this.orderRepository = orderRepository;
+        this.loginLogRepository = loginLogRepository;
+        this.passwordEncoder = passwordEncoder;
     }
 
     public AdminOverviewResponse overview() {
@@ -100,14 +109,26 @@ public class AdminService {
     public List<AdminUserView> users() {
         Map<Long, List<Task>> tasksByUser = taskRepository.findAll().stream()
                 .collect(Collectors.groupingBy(Task::getUserId));
+        // 充值合计：按用户聚合已支付订单
+        Map<Long, long[]> paidByUser = new java.util.HashMap<>(); // userId -> [totalFen, orders]
+        orderRepository.findAll().stream()
+                .filter(o -> "PAID".equals(o.getStatus()))
+                .forEach(o -> {
+                    long[] agg = paidByUser.computeIfAbsent(o.getUserId(), k -> new long[2]);
+                    agg[0] += o.getPayableFen();
+                    agg[1] += 1;
+                });
         return userRepository.findAll().stream()
                 .sorted(Comparator.comparing(User::getId))
                 .map(user -> {
                     List<Task> own = tasksByUser.getOrDefault(user.getId(), List.of());
                     long running = own.stream().filter(t -> t.getStatus() == TaskStatus.RUNNING).count();
+                    long[] paid = paidByUser.getOrDefault(user.getId(), new long[2]);
                     return new AdminUserView(user.getId(), user.getUsername(),
                             user.getRole() == null ? "USER" : user.getRole(),
-                            own.size(), running, user.getCreatedAt());
+                            own.size(), running, user.getCreatedAt(),
+                            user.isDisabled(), user.getLastLoginIp(), user.getLastLoginLocation(),
+                            user.getLastLoginAt(), paid[0], paid[1]);
                 })
                 .toList();
     }
@@ -119,6 +140,54 @@ public class AdminService {
                 .sorted(Comparator.comparing(Task::getId).reversed())
                 .map(task -> toView(task, nameById.get(task.getUserId())))
                 .toList();
+    }
+
+    /** 按用户过滤做题记录（用户详情页）。 */
+    public List<AdminTaskView> tasksByUser(Long userId) {
+        Map<Long, String> nameById = userRepository.findAll().stream()
+                .collect(Collectors.toMap(User::getId, User::getUsername, (a, b) -> a));
+        return taskRepository.findByUserIdOrderByIdDesc(userId).stream()
+                .map(task -> toView(task, nameById.get(task.getUserId())))
+                .toList();
+    }
+
+    /** 管理员重置用户密码：规则与注册一致，重置后旧 token 全部失效（强制重新登录）。 */
+    @Transactional
+    public void resetPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+        if (newPassword == null || newPassword.length() < 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码至少 8 位");
+        }
+        if (!newPassword.matches("(?=.*[A-Za-z])(?=.*\\d).+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码需同时包含字母和数字");
+        }
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setPasswordUpdatedAt(java.time.Instant.now());
+        userRepository.save(user);
+    }
+
+    /** 封禁/解封用户：封禁后无法登录，已有登录态在下一次请求时失效。 */
+    @Transactional
+    public void setDisabled(Long userId, boolean disabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+        if ("ADMIN".equalsIgnoreCase(user.getRole()) && disabled) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "不能封禁管理员账号");
+        }
+        user.setDisabled(disabled);
+        if (disabled) {
+            // 封禁同时踢下线
+            user.setPasswordUpdatedAt(java.time.Instant.now());
+        }
+        userRepository.save(user);
+    }
+
+    /** 用户登录记录（最近 50 条）。 */
+    @Transactional(readOnly = true)
+    public List<com.ykt.platform.entity.LoginLog> loginLogs(Long userId) {
+        return loginLogRepository.findByUserIdOrderByCreatedAtDesc(userId,
+                org.springframework.data.domain.PageRequest.of(0, 50));
     }
 
     @Transactional
@@ -140,8 +209,23 @@ public class AdminService {
         long taskCount = taskRepository.findByUserIdOrderByIdDesc(userId).size();
         long running = taskRepository.findByUserIdOrderByIdDesc(userId).stream()
                 .filter(t -> t.getStatus() == TaskStatus.RUNNING).count();
+        long[] paid = paidByUserSnapshot(userId);
         return new AdminUserView(user.getId(), user.getUsername(), user.getRole(),
-                taskCount, running, user.getCreatedAt());
+                taskCount, running, user.getCreatedAt(),
+                user.isDisabled(), user.getLastLoginIp(), user.getLastLoginLocation(),
+                user.getLastLoginAt(), paid[0], paid[1]);
+    }
+
+    /** 单用户的已支付合计快照（[totalFen, orders]）。 */
+    private long[] paidByUserSnapshot(Long userId) {
+        long[] agg = {0, 0};
+        for (var o : orderRepository.findByUserIdOrderByCreatedAtDesc(userId)) {
+            if ("PAID".equals(o.getStatus())) {
+                agg[0] += o.getPayableFen();
+                agg[1] += 1;
+            }
+        }
+        return agg;
     }
 
     private AdminTaskView toView(Task task, String username) {

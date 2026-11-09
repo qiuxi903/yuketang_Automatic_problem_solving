@@ -29,6 +29,23 @@ public class User {
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
+    /** 账号禁用：禁用后无法登录（付费平台防滥用）。 */
+    private boolean disabled = false;
+
+    /** 最近一次成功登录的客户端 IP。 */
+    @Column(length = 64)
+    private String lastLoginIp;
+
+    /** 最近一次成功登录的归属地（省市 · 运营商）。 */
+    @Column(length = 128)
+    private String lastLoginLocation;
+
+    /** 最近一次成功登录时间。 */
+    private Instant lastLoginAt;
+
+    /** 上次改密时间：早于该时间签发的 JWT 全部失效（管理员改密 = 踢下线）。 */
+    private Instant passwordUpdatedAt;
+
     public Long getId() {
         return id;
     }
@@ -63,6 +80,46 @@ public class User {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public boolean isDisabled() {
+        return disabled;
+    }
+
+    public void setDisabled(boolean disabled) {
+        this.disabled = disabled;
+    }
+
+    public String getLastLoginIp() {
+        return lastLoginIp;
+    }
+
+    public void setLastLoginIp(String lastLoginIp) {
+        this.lastLoginIp = lastLoginIp;
+    }
+
+    public String getLastLoginLocation() {
+        return lastLoginLocation;
+    }
+
+    public void setLastLoginLocation(String lastLoginLocation) {
+        this.lastLoginLocation = lastLoginLocation;
+    }
+
+    public Instant getLastLoginAt() {
+        return lastLoginAt;
+    }
+
+    public void setLastLoginAt(Instant lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
+    }
+
+    public Instant getPasswordUpdatedAt() {
+        return passwordUpdatedAt;
+    }
+
+    public void setPasswordUpdatedAt(Instant passwordUpdatedAt) {
+        this.passwordUpdatedAt = passwordUpdatedAt;
     }
 
     public void setCreatedAt(Instant createdAt) {

@@ -1,4 +1,5 @@
 import client from './client'
+import type { VipOrder } from './vip'
 import type { AdminOverview, AdminTaskView, AdminUserView, TaskSnapshot, UserRole } from '@/types'
 
 /** 管理员接口，后端 /api/admin/** 已限定 ADMIN 角色。 */
@@ -71,4 +72,43 @@ export function deleteUsedInvites() {
 /** 批量操作：disable / enable / delete，一次请求处理多选中的邀请码。 */
 export function batchInvites(action: 'disable' | 'enable' | 'delete', codes: string[]) {
   return client.post<unknown, { affected: number }>('/admin/invites/batch', { action, codes })
+}
+
+/* —— 账号系统（管理员用户管理） —— */
+
+export interface LoginLogView {
+  id: number
+  userId: number
+  username: string
+  ip: string
+  location: string | null
+  userAgent: string | null
+  success: boolean
+  message: string | null
+  createdAt: string
+}
+
+/** 管理员重置用户密码（重置后该用户所有登录态失效）。 */
+export function resetUserPassword(id: number, password: string) {
+  return client.put<unknown, { ok: boolean }>(`/admin/users/${id}/password`, { password })
+}
+
+/** 封禁 / 解封用户。 */
+export function setUserDisabled(id: number, disabled: boolean) {
+  return client.put<unknown, { ok: boolean; disabled: boolean }>(`/admin/users/${id}/disabled`, { disabled })
+}
+
+/** 用户登录记录（最近 50 条：IP/归属地/结果）。 */
+export function getUserLoginLogs(id: number) {
+  return client.get<unknown, LoginLogView[]>(`/admin/users/${id}/login-logs`)
+}
+
+/** 按用户过滤做题记录。 */
+export function getUserTasks(id: number) {
+  return client.get<unknown, import('@/types').AdminTaskView[]>(`/admin/users/${id}/tasks`)
+}
+
+/** 用户充值/订单记录。 */
+export function getUserOrders(id: number) {
+  return client.get<unknown, VipOrder[]>(`/admin/vip/users/${id}/orders`)
 }
