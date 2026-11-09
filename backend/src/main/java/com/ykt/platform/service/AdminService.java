@@ -44,6 +44,7 @@ public class AdminService {
     private final com.ykt.platform.repository.VipOrderRepository orderRepository;
     private final com.ykt.platform.repository.LoginLogRepository loginLogRepository;
     private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
+    private final AdminAuditService auditService;
 
     public AdminService(UserRepository userRepository,
                         TaskRepository taskRepository,
@@ -54,7 +55,8 @@ public class AdminService {
                         VipAdminService vipAdminService,
                         com.ykt.platform.repository.VipOrderRepository orderRepository,
                         com.ykt.platform.repository.LoginLogRepository loginLogRepository,
-                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
+                        org.springframework.security.crypto.password.PasswordEncoder passwordEncoder,
+                        AdminAuditService auditService) {
         this.userRepository = userRepository;
         this.taskRepository = taskRepository;
         this.sessionRepository = sessionRepository;
@@ -65,6 +67,7 @@ public class AdminService {
         this.orderRepository = orderRepository;
         this.loginLogRepository = loginLogRepository;
         this.passwordEncoder = passwordEncoder;
+        this.auditService = auditService;
     }
 
     public AdminOverviewResponse overview() {
@@ -194,6 +197,8 @@ public class AdminService {
         user.setPasswordHash(passwordEncoder.encode(newPassword));
         user.setPasswordUpdatedAt(java.time.Instant.now());
         userRepository.save(user);
+        auditService.record(userId, user.getUsername(), "RESET_PASSWORD", user.getUsername(),
+                "管理员重置密码（不记录新密码）");
     }
 
     /** 封禁/解封用户：封禁后无法登录，已有登录态在下一次请求时失效。 */
@@ -210,6 +215,8 @@ public class AdminService {
             user.setPasswordUpdatedAt(java.time.Instant.now());
         }
         userRepository.save(user);
+        auditService.record(userId, user.getUsername(), disabled ? "DISABLE" : "ENABLE",
+                user.getUsername(), disabled ? "封禁账号" : "解封账号");
     }
 
     /** 用户登录记录（最近 50 条）。 */

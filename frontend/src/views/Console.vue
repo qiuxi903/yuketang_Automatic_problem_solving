@@ -241,6 +241,24 @@ onMounted(async () => {
   flex: none;
 }
 
+/* 手机端傻瓜化：主按钮加大加满、提示更大更清楚 */
+@media (max-width: 768px) {
+  .ab-hint {
+    font-size: 13px;
+    white-space: normal;
+    line-height: 1.5;
+  }
+  .action-bar .el-button--primary {
+    flex: 1;
+    min-height: 48px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  .action-bar .el-button:not(.el-button--primary) {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 768px) {
   .steps {
     display: flex;
@@ -283,14 +301,17 @@ onMounted(async () => {
   }
   .step.is-on {
     background: var(--accent-050);
-    border-color: var(--accent-200);
+    border-color: var(--accent);
+    box-shadow: var(--shadow-sm);
   }
   .step.is-on .step-dot {
     background: var(--accent);
     color: #fff;
+    transform: scale(1.15);
   }
   .step.is-on .step-label {
     color: var(--accent-700);
+    font-weight: 800;
   }
   .step.is-done .step-dot {
     background: var(--accent-100);

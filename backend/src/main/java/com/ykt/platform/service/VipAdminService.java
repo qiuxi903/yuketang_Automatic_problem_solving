@@ -68,6 +68,7 @@ public class VipAdminService {
     private final BackupService backupService;
     private final UserRepository userRepository;
     private final VipAccountRepository vipAccountRepository;
+    private final AdminAuditService auditService;
     private final VipService vipService;
 
     public VipAdminService(VipOrderRepository orderRepository,
@@ -83,6 +84,7 @@ public class VipAdminService {
                            BackupService backupService,
                            UserRepository userRepository,
                            VipAccountRepository vipAccountRepository,
+                           AdminAuditService auditService,
                            VipService vipService) {
         this.orderRepository = orderRepository;
         this.couponRepository = couponRepository;
@@ -97,6 +99,7 @@ public class VipAdminService {
         this.backupService = backupService;
         this.userRepository = userRepository;
         this.vipAccountRepository = vipAccountRepository;
+        this.auditService = auditService;
         this.vipService = vipService;
     }
 
@@ -131,13 +134,15 @@ public class VipAdminService {
         }
         order.setAdminRemark(adminRemark);
         vipService.fulfill(order);
+        auditService.record(adminId, adminName(adminId), "CONFIRM_ORDER", orderNo,
+                "确认订单 " + kindText(order) + " 实付 " + order.getPayableFen() + " 分");
         log.info("管理员 {} 人工确认订单 {}（{} 分）", adminId, orderNo, order.getPayableFen());
         return toOrderView(order, Map.of());
     }
 
     /** 拒单：待支付订单标记 REJECTED（用户侧不可见原因需在 adminRemark 里写明）。 */
     @Transactional
-    public VipOrderView rejectOrder(String orderNo, String adminRemark) {
+    public VipOrderView rejectOrder(String orderNo, String adminRemark, Long adminId) {
         VipOrder order = orderRepository.lockByOrderNo(orderNo)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "订单不存在"));
         if (!VipOrder.STATUS_CREATED.equals(order.getStatus())) {
@@ -146,6 +151,7 @@ public class VipAdminService {
         order.setStatus(VipOrder.STATUS_REJECTED);
         order.setAdminRemark(adminRemark);
         orderRepository.save(order);
+        auditService.record(adminId, adminName(adminId), "REJECT_ORDER", orderNo, "拒单");
         return toOrderView(order, Map.of());
     }
 
@@ -274,6 +280,7 @@ public class VipAdminService {
             case "MONTH" -> {
                 int days = request.days() == null ? vipService.settings().getMonthDays() : Math.max(1, request.days());
                 Instant expiresAt = vipService.grantMonth(userId, days, null, adminId);
+                auditService.record(adminId, adminName(adminId), "GRANT_MONTH", "用户#" + userId, "发放 " + days + " 天月卡");
                 return "月卡已发放，到期 " + expiresAt;
             }
             case "DATE" -> {
@@ -281,6 +288,7 @@ public class VipAdminService {
                     throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "发放单日权益需指定批次");
                 }
                 vipService.grantDatePass(userId, request.targetBatch(), null, adminId);
+                auditService.record(adminId, adminName(adminId), "GRANT_DATE", "用户#" + userId, "解锁日期 " + request.targetBatch());
                 return "日期 " + request.targetBatch() + " 已解锁";
             }
             case "QUOTA" -> {
@@ -288,6 +296,7 @@ public class VipAdminService {
                 var acc = vipService.account(userId);
                 acc.setFreeQuota(Math.max(0, acc.getFreeQuota() + quota));
                 acc.setUpdatedAt(Instant.now());
+                auditService.record(adminId, adminName(adminId), "GRANT_QUOTA", "用户#" + userId, "额度 " + (quota >= 0 ? "+" : "") + quota);
                 return "额度 " + (quota >= 0 ? "+" : "") + quota + "，当前 " + acc.getFreeQuota() + " 次";
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
@@ -320,6 +329,7 @@ public class VipAdminService {
         RainBinding binding = bindingRepository.findByUserId(userId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "该用户没有绑定记录"));
         bindingRepository.delete(binding);
+        auditService.record(userId, adminName(userId), "UNBIND", binding.getYktName(), "管理员解绑雨课堂账号");
         log.info("管理员已解绑用户 {} 的雨课堂账号「{}」", userId, binding.getYktName());
     }
 
@@ -441,6 +451,7 @@ public class VipAdminService {
         price.setUpdatedAt(Instant.now());
         price.setUpdatedBy(adminId);
         batchPriceRepository.save(price);
+        auditService.record(adminId, adminName(adminId), "SET_BATCH_PRICE", price.getBatch(), price.getBatch() + " 定价 " + priceFen + " 分");
         return new VipBatchPriceView(price.getBatch(), price.getPriceFen(), price.getUpdatedAt());
     }
 
@@ -651,6 +662,10 @@ public class VipAdminService {
                 o.getRemark(), o.getAdminRemark(),
                 o.getClaimedAt(), o.getPaidAt(), o.getExpiresAt(), o.getCreatedAt(),
                 null);
+    }
+
+    private String adminName(Long adminId) {
+        return userRepository.findById(adminId).map(u -> u.getUsername()).orElse("admin#" + adminId);
     }
 
     private static String randomBlock() {

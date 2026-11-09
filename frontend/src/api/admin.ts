@@ -112,3 +112,21 @@ export function getUserTasks(id: number) {
 export function getUserOrders(id: number) {
   return client.get<unknown, VipOrder[]>(`/admin/vip/users/${id}/orders`)
 }
+
+/* —— 管理操作审计 —— */
+
+export interface AuditLogView {
+  id: number
+  adminId: number
+  adminUsername: string
+  action: string
+  target: string
+  detail: string
+  ip: string
+  createdAt: string
+}
+
+/** 最近管理操作审计（谁/何时/对谁/做了什么/IP）。 */
+export function listAuditLogs(limit = 100) {
+  return client.get<unknown, AuditLogView[]>('/admin/audit-logs', { params: { limit } })
+}

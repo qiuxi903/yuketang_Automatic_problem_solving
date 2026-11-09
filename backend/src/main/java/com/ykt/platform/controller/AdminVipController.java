@@ -65,7 +65,7 @@ public class AdminVipController {
     @PostMapping("/orders/{orderNo}/reject")
     public VipOrderView rejectOrder(@PathVariable String orderNo,
                                     @RequestBody(required = false) Map<String, String> body) {
-        return adminService.rejectOrder(orderNo, body == null ? null : body.get("adminRemark"));
+        return adminService.rejectOrder(orderNo, body == null ? null : body.get("adminRemark"), SecurityUtil.currentUserId());
     }
 
     /** 粘贴收款通知文本快速核销（监听漏单兜底）。 */

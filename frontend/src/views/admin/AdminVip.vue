@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CopyDocument, Delete, Refresh } from '@element-plus/icons-vue'
-import { listUsers } from '@/api/admin'
+import { listUsers, listAuditLogs } from '@/api/admin'
 import type { AdminUserView } from '@/types'
 import {
   batchVipCoupons,
@@ -518,6 +518,7 @@ const entitlements = ref<VipEntitlementView[]>([])
 const bindings = ref<VipBindingView[]>([])
 const batches = ref<string[]>([])
 const usersLoading = ref(false)
+const auditLogs = ref<import('@/api/admin').AuditLogView[]>([])
 const grantForm = ref({
   userId: null as number | null,
   kind: 'MONTH' as 'MONTH' | 'DATE' | 'QUOTA',
@@ -529,16 +530,18 @@ const grantForm = ref({
 async function loadUsers() {
   usersLoading.value = true
   try {
-    const [u, e, b, p] = await Promise.all([
+    const [u, e, b, p, audits] = await Promise.all([
       listUsers(),
       listVipEntitlements(),
       listVipBindings(),
       getVipProducts(),
+      listAuditLogs(100),
     ])
     users.value = u
     entitlements.value = e
     bindings.value = b
     batches.value = p.batches.map((x) => x.batch)
+    auditLogs.value = audits
   } finally {
     usersLoading.value = false
   }
@@ -1174,6 +1177,20 @@ onMounted(() => void loadTab(activeTab.value))
               </el-table-column>
             </el-table>
           </div>
+        </div>
+
+        <div class="panel-card mt">
+          <h4>管理操作审计（最近 100 条，敏感操作全程留痕）</h4>
+          <el-table :data="auditLogs" size="small" max-height="320">
+            <el-table-column label="时间" width="150">
+              <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+            </el-table-column>
+            <el-table-column prop="adminUsername" label="管理员" width="100" />
+            <el-table-column prop="action" label="操作" width="130" />
+            <el-table-column prop="target" label="对象" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="detail" label="详情" min-width="180" show-overflow-tooltip />
+            <el-table-column prop="ip" label="IP" width="120" show-overflow-tooltip />
+          </el-table>
         </div>
 
         <div class="panel-card mt">
