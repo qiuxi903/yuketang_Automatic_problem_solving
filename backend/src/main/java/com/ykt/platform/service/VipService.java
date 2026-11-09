@@ -186,6 +186,33 @@ public class VipService {
     }
 
     /**
+     * 建任务前置校验（批次后置流程专用）：此时还不知道用户要解锁哪个日期，
+     * 只要用户手里还有「任何可做题的路」就放行到扫码环节——
+     * 月卡在期 / 已解锁过某些日期 / 免费额度还有剩，任一满足即可；
+     * 全都没有的话，建了任务也做不了（普通用户会白等扫码），直接拦截引导付费。
+     * collect（取答案）永远放行。
+     */
+    @Transactional(readOnly = true)
+    public void checkTaskCreationAllowed(Long userId, boolean admin, String mode) {
+        if (!properties.enforce()) {
+            return;
+        }
+        if (admin || "collect".equalsIgnoreCase(mode)) {
+            return;
+        }
+        if (monthCardActive(userId)) {
+            return;
+        }
+        if (!unlockedBatches(userId).isEmpty()) {
+            return;
+        }
+        if (account(userId).getFreeQuota() > 0) {
+            return;
+        }
+        throw new VipRequiredException(null);
+    }
+
+    /**
      * 付费闸门：enforce 关闭或管理员直接放行；月卡在期或持有该批次单日权益放行；
      * 否则抛 {@link VipRequiredException}（→ 402，前端跳付费页）。
      *

@@ -128,9 +128,15 @@ public class TaskService {
         }
         // 批次可后置：为空时先扫码登录，待 Agent 回传账号作业清单后再由用户确认批次
         String batch = request.batch() == null || request.batch().isBlank() ? null : request.batch();
-        // VIP 付费闸门（只有自动做题收费，取答案 collect 免费）：批次已知（含重做任务）时先校验解锁态
+        // VIP 付费闸门（只有自动做题收费，取答案 collect 免费）
         String reqMode = request.mode() == null || request.mode().isBlank() ? "answer" : request.mode();
-        vipService.checkBatchAccess(userId, batch, currentUserIsAdmin(), reqMode);
+        if (batch != null) {
+            // 批次已知：按解锁态精确校验
+            vipService.checkBatchAccess(userId, batch, currentUserIsAdmin(), reqMode);
+        } else {
+            // 批次后置：没有任何可用权益（无月卡/无已解锁/无额度）→ 建了也做不了，直接拦截引导付费
+            vipService.checkTaskCreationAllowed(userId, currentUserIsAdmin(), reqMode);
+        }
         List<String> paperNames = batch == null ? List.of() : answerLibService.paperNames(batch);
         // 重做任务：只做指定卷子（通常来自上一任务「取答案未做」的弹窗一键重做）
         List<String> redo = request.redoPapers() == null ? List.of() : request.redoPapers().stream()
