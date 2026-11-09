@@ -6,11 +6,24 @@ import type { UserRole } from '@/types'
 const TOKEN_KEY = 'ykt_token'
 const USERNAME_KEY = 'ykt_username'
 const ROLE_KEY = 'ykt_role'
+const AVATAR_KEY = 'ykt_avatar'
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string>(localStorage.getItem(TOKEN_KEY) ?? '')
   const username = ref<string>(localStorage.getItem(USERNAME_KEY) ?? '')
   const role = ref<UserRole>((localStorage.getItem(ROLE_KEY) as UserRole) ?? 'USER')
+  const avatar = ref<string>(localStorage.getItem(AVATAR_KEY) ?? '')
+
+  function setAvatarUrl(url: string | null) {
+    avatar.value = url ?? ''
+    if (url) localStorage.setItem(AVATAR_KEY, url)
+    else localStorage.removeItem(AVATAR_KEY)
+  }
+
+  function setUsernameSafe(name: string) {
+    username.value = name
+    localStorage.setItem(USERNAME_KEY, name)
+  }
 
   const isLogin = computed(() => token.value.length > 0)
   const isAdmin = computed(() => role.value === 'ADMIN')
@@ -38,10 +51,11 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = ''
     username.value = ''
     role.value = 'USER'
+    setAvatarUrl(null)
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(USERNAME_KEY)
     localStorage.removeItem(ROLE_KEY)
   }
 
-  return { token, username, role, isLogin, isAdmin, setAuth, login, register, logout }
+  return { token, username, avatar, isLogin, isAdmin, setAuth, setAvatarUrl, setUsernameSafe, login, register, logout }
 })

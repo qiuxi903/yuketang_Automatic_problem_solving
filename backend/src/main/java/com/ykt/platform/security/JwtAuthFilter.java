@@ -47,6 +47,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     filterChain.doFilter(request, response);
                     return;
                 }
+                // 改名后 token 里的旧用户名 30 秒内刷新为库中最新
+                user = withFreshUsername(user);
                 String role = user.role() == null || user.role().isBlank() ? "USER" : user.role();
                 var authentication = new UsernamePasswordAuthenticationToken(
                         user, null, List.of(new SimpleGrantedAuthority("ROLE_" + role)));
@@ -57,6 +59,32 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             }
         }
         filterChain.doFilter(request, response);
+    }
+
+    /** 缓存：userId -> (最新用户名, 写入时间)；随 passwordUpdatedAt 缓存一起 30s 刷新。 */
+    private final java.util.concurrent.ConcurrentHashMap<Long, java.util.Map.Entry<String, Long>> nameCache
+            = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 用库中最新用户名覆盖 token 里的旧名（30s 缓存，无库记录时原样返回）。 */
+    private AuthUser withFreshUsername(AuthUser user) {
+        try {
+            long now = System.currentTimeMillis();
+            java.util.Map.Entry<String, Long> cached = nameCache.get(user.id());
+            String username;
+            if (cached != null && now - cached.getValue() < 30_000) {
+                username = cached.getKey();
+            } else {
+                username = userRepository.findById(user.id())
+                        .map(User::getUsername)
+                        .orElse(user.username());
+                nameCache.put(user.id(), java.util.Map.entry(username, now));
+            }
+            if (!username.equals(user.username())) {
+                return new AuthUser(user.id(), username, user.role());
+            }
+        } catch (Exception ignored) {
+        }
+        return user;
     }
 
     /** token 是否仍有效（签发时间晚于上次改密；passwordUpdatedAt 为空 = 未改过密，恒有效）。 */
