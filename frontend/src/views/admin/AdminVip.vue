@@ -16,6 +16,9 @@ import {
   getVipSettings,
   getVipStats,
   grantVip,
+  deleteBatchPrice,
+  listBatchPrices,
+  setBatchPrice,
   listVipActivities,
   listVipBindings,
   listVipCoupons,
@@ -312,6 +315,8 @@ const settingsForm = ref({
 })
 
 const activities = ref<VipActivityView[]>([])
+const batchRows = ref<{ batch: string; papersCount: number; priceYuan: number; isCustom: boolean }[]>([])
+const batchSaving = ref('')
 const actVisible = ref(false)
 const actSaving = ref(false)
 const actForm = ref({
@@ -322,11 +327,20 @@ const actForm = ref({
 })
 
 async function loadPay() {
-  const [s, acts, qr] = await Promise.all([getVipSettings(), listVipActivities(), getPayQrImages()])
+  const [s, acts, qr, products, prices] = await Promise.all([
+    getVipSettings(), listVipActivities(), getPayQrImages(), getVipProducts(), listBatchPrices(),
+  ])
   settings.value = s
   activities.value = acts
   qrWechat.value = qr.wechat
   qrAlipay.value = qr.alipay
+  const overrideMap = new Map(prices.map((o) => [o.batch, o.priceFen]))
+  batchRows.value = products.batches.map((b) => ({
+    batch: b.batch,
+    papersCount: b.papersCount,
+    priceYuan: (overrideMap.get(b.batch) ?? b.priceFen) / 100,
+    isCustom: overrideMap.has(b.batch),
+  }))
   settingsForm.value = {
     datePassYuan: s.datePassPriceFen / 100,
     monthYuan: s.monthPriceFen / 100,
@@ -394,6 +408,34 @@ async function clearQr(kind: 'wechat' | 'alipay') {
   if (kind === 'wechat') qrWechat.value = null
   else qrAlipay.value = null
   await saveQr()
+}
+
+/** 保存某日期的单独定价（元 → 分）。 */
+async function saveBatchPrice(row: { batch: string; priceYuan: number }) {
+  batchSaving.value = row.batch
+  try {
+    await setBatchPrice(row.batch, Math.round(row.priceYuan * 100))
+    ElMessage.success(`日期 ${row.batch} 的解锁价已设为 ¥${row.priceYuan}`)
+    await loadPay()
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    batchSaving.value = ''
+  }
+}
+
+/** 恢复某日期为全局默认价。 */
+async function resetBatchPrice(batch: string) {
+  batchSaving.value = batch
+  try {
+    await deleteBatchPrice(batch)
+    ElMessage.success(`日期 ${batch} 已恢复默认价`)
+    await loadPay()
+  } catch {
+    /* 拦截器已提示 */
+  } finally {
+    batchSaving.value = ''
+  }
 }
 
 async function addActivity() {
@@ -873,6 +915,52 @@ onMounted(() => void loadTab(activeTab.value))
               </el-form-item>
               <el-button type="primary" :loading="paySaving" @click="saveSettings">保存设置</el-button>
             </el-form>
+
+            <h4 class="mt">单日按日期定价</h4>
+            <p class="form-hint">
+              默认所有日期 ¥{{ fen2yuan(settings?.datePassPriceFen ?? 300) }}；某一天要单独改价就在下面改（如节假日加价、特价促销），保存后立即生效。
+            </p>
+            <el-table :data="batchRows" size="small" max-height="320">
+              <el-table-column prop="batch" label="日期" width="90" />
+              <el-table-column label="卷子" width="70">
+                <template #default="{ row }">{{ row.papersCount }} 套</template>
+              </el-table-column>
+              <el-table-column label="价格（元）" min-width="140">
+                <template #default="{ row }">
+                  <el-input-number
+                    v-model="row.priceYuan"
+                    :min="0.01"
+                    :max="999"
+                    :step="1"
+                    size="small"
+                    controls-position="right"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag v-if="row.isCustom" type="warning" effect="light" size="small">单独价</el-tag>
+                  <el-tag v-else type="info" effect="light" size="small">默认</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="150" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    size="small"
+                    type="primary"
+                    plain
+                    :loading="batchSaving === row.batch"
+                    @click="saveBatchPrice(row)"
+                  >保存</el-button>
+                  <el-button
+                    v-if="row.isCustom"
+                    size="small"
+                    :loading="batchSaving === row.batch"
+                    @click="resetBatchPrice(row.batch)"
+                  >恢复默认</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
           </div>
 
           <div class="panel-card">

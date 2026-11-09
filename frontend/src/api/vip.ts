@@ -28,6 +28,8 @@ export interface VipBatchView {
   batch: string
   papersCount: number
   unlocked: boolean
+  /** 该日期的单日解锁价（分）；未单独定价 = 全局默认价 */
+  priceFen: number
 }
 
 export interface VipProducts {
@@ -319,4 +321,24 @@ export function listPayNotifications() {
 
 export function deletePayNotification(id: number) {
   return client.delete<unknown, void>(`/admin/vip/pay-notifications/${id}`)
+}
+
+/* —— 单日按批次定价（管理端） —— */
+
+export interface VipBatchPriceView {
+  batch: string
+  priceFen: number
+  updatedAt: string
+}
+
+export function listBatchPrices() {
+  return client.get<unknown, VipBatchPriceView[]>('/admin/vip/batch-prices')
+}
+
+export function setBatchPrice(batch: string, priceFen: number) {
+  return client.put<unknown, VipBatchPriceView>('/admin/vip/batch-prices', { batch, priceFen })
+}
+
+export function deleteBatchPrice(batch: string) {
+  return client.delete<unknown, void>(`/admin/vip/batch-prices/${encodeURIComponent(batch)}`)
 }

@@ -12,6 +12,7 @@ import com.ykt.platform.dto.VipQuotaUnlockRequest;
 import com.ykt.platform.dto.VipRedeemRequest;
 import com.ykt.platform.dto.VipStatusResponse;
 import com.ykt.platform.entity.PayNotification;
+import com.ykt.platform.entity.VipBatchPrice;
 import com.ykt.platform.entity.RainBinding;
 import com.ykt.platform.entity.VipAccount;
 import com.ykt.platform.entity.VipActivity;
@@ -21,6 +22,7 @@ import com.ykt.platform.entity.VipEntitlement;
 import com.ykt.platform.entity.VipOrder;
 import com.ykt.platform.entity.VipSettings;
 import com.ykt.platform.repository.PayNotificationRepository;
+import com.ykt.platform.repository.VipBatchPriceRepository;
 import com.ykt.platform.repository.RainBindingRepository;
 import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.repository.VipAccountRepository;
@@ -75,6 +77,7 @@ public class VipService {
     private final VipActivityRepository activityRepository;
     private final RainBindingRepository bindingRepository;
     private final PayNotificationRepository notificationRepository;
+    private final VipBatchPriceRepository batchPriceRepository;
     private final UserRepository userRepository;
     private final AnswerLibService answerLibService;
     private final VipProperties properties;
@@ -88,6 +91,7 @@ public class VipService {
                       VipActivityRepository activityRepository,
                       RainBindingRepository bindingRepository,
                       PayNotificationRepository notificationRepository,
+                      VipBatchPriceRepository batchPriceRepository,
                       UserRepository userRepository,
                       AnswerLibService answerLibService,
                       VipProperties properties) {
@@ -100,6 +104,7 @@ public class VipService {
         this.activityRepository = activityRepository;
         this.bindingRepository = bindingRepository;
         this.notificationRepository = notificationRepository;
+        this.batchPriceRepository = batchPriceRepository;
         this.userRepository = userRepository;
         this.answerLibService = answerLibService;
         this.properties = properties;
@@ -128,6 +133,17 @@ public class VipService {
             a.setFreeQuota(properties.freeQuotaOnRegister());
             return accountRepository.save(a);
         });
+    }
+
+    /**
+     * 某日期的单日解锁价：管理员单独定价优先，否则用全局默认价。
+     */
+    @Transactional(readOnly = true)
+    public int datePassPriceFor(String batch) {
+        VipSettings settings = settings();
+        return batchPriceRepository.findByBatch(batch)
+                .map(VipBatchPrice::getPriceFen)
+                .orElse(settings.getDatePassPriceFen());
     }
 
     @Transactional(readOnly = true)
@@ -214,7 +230,8 @@ public class VipService {
         PaperManifestResponse manifest = answerLibService.getManifest();
         List<VipProductsResponse.VipBatchView> batches = manifest.batches().stream()
                 .map(b -> new VipProductsResponse.VipBatchView(
-                        b.batch(), b.papersCount(), !properties.enforce() || batchUnlocked(userId, b.batch())))
+                        b.batch(), b.papersCount(), !properties.enforce() || batchUnlocked(userId, b.batch()),
+                        datePassPriceFor(b.batch())))
                 .toList();
         return new VipProductsResponse(
                 settings.getDatePassPriceFen(),
@@ -266,7 +283,7 @@ public class VipService {
         }
 
         int originalFen = VipOrder.KIND_DATE_PASS.equals(kind)
-                ? settings.getDatePassPriceFen() : settings.getMonthPriceFen();
+                ? datePassPriceFor(targetBatch) : settings.getMonthPriceFen();
 
         // 折扣：活动自动生效 + 用户填的折扣码，二者取最优（不叠加）
         Instant now = Instant.now();

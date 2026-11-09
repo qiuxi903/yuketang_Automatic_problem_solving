@@ -40,8 +40,12 @@ public class VipBootstrap {
 
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() {
-        // 单例设置行（幂等）
-        vipService.settings();
+        // 单例设置行（幂等）+ 旧默认月卡价一次性迁移（2900 -> 1500；仅当值仍是旧默认时才动，不覆盖管理员改过的价）
+        var settings = vipService.settings();
+        if (settings.getMonthPriceFen() == 2900) {
+            settings.setMonthPriceFen(1500);
+            log.info("月卡默认价已从 2900 分迁移为 1500 分");
+        }
         // 存量用户补建 VIP 账户，享受与新注册用户相同的免费体验额度
         List<User> users = userRepository.findAll();
         int created = 0;

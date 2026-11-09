@@ -1,5 +1,7 @@
 package com.ykt.platform.controller;
 
+import com.ykt.platform.dto.VipBatchPriceSetRequest;
+import com.ykt.platform.dto.VipBatchPriceView;
 import com.ykt.platform.dto.VipBindingView;
 import com.ykt.platform.dto.VipCouponCreateRequest;
 import com.ykt.platform.dto.VipCouponView;
@@ -137,6 +139,23 @@ public class AdminVipController {
     @DeleteMapping("/users/{userId}/binding")
     public void unbind(@PathVariable Long userId) {
         adminService.unbind(userId);
+    }
+
+    // ---------- 单日按批次定价 ----------
+
+    @GetMapping("/batch-prices")
+    public List<VipBatchPriceView> batchPrices() {
+        return adminService.listBatchPrices();
+    }
+
+    @PutMapping("/batch-prices")
+    public VipBatchPriceView setBatchPrice(@RequestBody VipBatchPriceSetRequest request) {
+        return adminService.setBatchPrice(request.batch(), request.priceFen(), SecurityUtil.currentUserId());
+    }
+
+    @DeleteMapping("/batch-prices/{batch}")
+    public void deleteBatchPrice(@PathVariable String batch) {
+        adminService.deleteBatchPrice(batch);
     }
 
     // ---------- 活动与设置 ----------

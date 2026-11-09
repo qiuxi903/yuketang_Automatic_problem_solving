@@ -4,6 +4,7 @@ import com.ykt.platform.entity.VipOrder;
 import com.ykt.platform.entity.VipSettings;
 import com.ykt.platform.repository.VipOrderRepository;
 import com.ykt.platform.repository.VipSettingsRepository;
+import com.ykt.platform.service.VipService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -21,10 +22,13 @@ public class VipExceptionHandler {
 
     private final VipSettingsRepository settingsRepository;
     private final VipOrderRepository orderRepository;
+    private final VipService vipService;
 
-    public VipExceptionHandler(VipSettingsRepository settingsRepository, VipOrderRepository orderRepository) {
+    public VipExceptionHandler(VipSettingsRepository settingsRepository, VipOrderRepository orderRepository,
+                               VipService vipService) {
         this.settingsRepository = settingsRepository;
         this.orderRepository = orderRepository;
+        this.vipService = vipService;
     }
 
     @ExceptionHandler(VipRequiredException.class)
@@ -35,6 +39,8 @@ public class VipExceptionHandler {
         body.put("message", ex.getMessage());
         body.put("batch", ex.getBatch());
         body.put("datePassPriceFen", settings == null ? 0 : settings.getDatePassPriceFen());
+        // 该批次若被管理员单独定价，返回批次价（前端付费页/提示展示真实应付）
+        body.put("batchPriceFen", vipService.datePassPriceFor(ex.getBatch()));
         body.put("monthPriceFen", settings == null ? 0 : settings.getMonthPriceFen());
         body.put("monthDays", settings == null ? 30 : settings.getMonthDays());
         body.put("pendingOrders", orderRepository.countByStatus(VipOrder.STATUS_CREATED));

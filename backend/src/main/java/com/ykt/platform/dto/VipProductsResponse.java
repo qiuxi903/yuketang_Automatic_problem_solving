@@ -15,7 +15,10 @@ public record VipProductsResponse(
         VipActivityView activity,
         List<VipBatchView> batches) {
 
-    /** 批次（日期）行：unlocked 表示当前用户已可免费做题。 */
-    public record VipBatchView(String batch, long papersCount, boolean unlocked) {
+    /**
+     * 批次（日期）行：unlocked 表示当前用户已可免费做题；
+     * priceFen 为该日期的单日解锁价（管理员未单独定价时 = 全局默认价）。
+     */
+    public record VipBatchView(String batch, long papersCount, boolean unlocked, int priceFen) {
     }
 }

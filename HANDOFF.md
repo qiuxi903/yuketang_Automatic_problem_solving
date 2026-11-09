@@ -35,6 +35,13 @@
 - worker.py：读不到账号名不再「12s 放行」（fail-closed），等待到超时明确报错
 - 管理后台可解绑；`ykt.vip.bind-required=false` 关闭
 
+### 按日期定价
+- 新表 `vip_batch_price`（batch 唯一, priceFen）：管理员单独定价某日期，未覆盖的日期用 `VipSettings.datePassPriceFen`（默认 3 元）
+- 月卡默认价已改 15 元（VipSettings 默认 1500 分；存量库由 VipBootstrap 从旧默认 2900 一次性迁移，不覆盖管理员改过的价）
+- API：`GET/PUT/DELETE /api/admin/vip/batch-prices`；下单/商品接口（`/api/vip/products` 的 VipBatchView.priceFen）与 402 payload（batchPriceFen）全部跟随批次价
+- 管理端「支付与活动」页：定价 panel 下方「单日按日期定价」表（改价/保存/恢复默认，单位元）；付费页日期下拉显示每个日期的价格并联动价格卡
+- 管理端价格输入一律用「元」，展示/保存换算分（曾出过把分当元显示的 bug，见 3f）
+
 ### 运营统计
 - **申报核实（到账记录池）**：监听/粘贴的每笔收款先入 `pay_notification` 池（未匹配订单也不丢）；
   用户点「我已支付，核实到账」→ 按实付金额精确比对池中未核销记录 → 符合即核销记录并自动开通（verified=true）；
@@ -61,7 +68,7 @@
 ## 三、已验证 / 未验证（诚实清单）
 
 - ✅ `mvn clean package`（Java 21）通过；`npm run build`（vue-tsc）通过；agent py 编译通过
-- ✅ 端到端冒烟 **21/21**（含 collect 免费、统计口径、概览摘要、申报未核实拒绝、到账入池申报自动开通）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
+- ✅ 端到端冒烟 **24/24**（含月卡默认 1500 断言、批次价覆盖/下单/恢复默认）（含 collect 免费、统计口径、概览摘要、申报未核实拒绝、到账入池申报自动开通）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
 - ✅ 浏览器视觉验证：/vip 亮色/暗色/移动端(375px) + 支付弹层移动端 + /admin/vip 移动端卡片视图，UI 与设计系统 v2 统一（var() 令牌）
 - ❌ NOT RUN：虎皮椒渠道联调（无凭据）；pay-listener 对真实微信收款的校准（`--probe-uia` 待用户跑）；
   雨课堂真实扫码的绑定全链路（需真人扫码终验）；暗色/移动端只过了代码层（var() 令牌+断点），未截图细验
@@ -83,6 +90,7 @@
 3b. **Windows 下运行中的 jar 被锁定：`mvn clean package` 会静默失败继续跑旧 jar**——先停后端（含孤儿 java 进程，`netstat -ano | grep 28080` 查 PID 再 taskkill）再打包
 3c. 前端 dev server 是父子进程结构，TaskStop/杀父进程会留孤儿 vite 占 25173（服务旧代码白屏/旧页面）——按端口查 PID `taskkill //PID <pid> //F //T` 连子进程一起杀
 3d. **手机端整页排版变宽/内容右缘被裁的根因**：ConsoleLayout `.shell-body > *` 是 flex 子项，默认 min-width:auto 下会被宽内容（el-table 最小内容宽等）撑破布局宽度——已加 `min-width:0` 修复；新增布局必须保证 flex 链上每级都有 min-width:0
+3f. 金额单位换算：后端全程「分」，管理端输入/展示「元」——新增价格类 UI 时务必换算（单日定价表曾把 300 分显示成 300 元）
 3e. AdminVip 四个 el-tab-pane 已加 `lazy`：非激活页签不渲染 DOM，避免隐藏容器里 el-table 按内容宽度初始化（同时首屏更轻）；main.css 移动端有 `html,body{overflow-x:clip}` 兜底，页面不应再出现横向滑动
 4. GBK 控制台打印 ✓/✗ 会 UnicodeEncodeError——脚本里 `sys.stdout.reconfigure(encoding="utf-8")` 或 `PYTHONIOENCODING=utf-8`
 5. el-table 模板槽 `{ row }` 是 any，直接 `map[row.x]` 会 vue-tsc TS7053——包一层类型化辅助函数

@@ -54,8 +54,13 @@ const purchasableBatches = computed(
 )
 
 /** 单日卡当前实价：套用生效活动折扣后的应付分 */
+const selectedBatchPriceFen = computed(() => {
+  const picked = purchasableBatches.value.find((b) => b.batch === pickBatch.value)
+  return picked?.priceFen ?? products.value?.datePassPriceFen ?? 0
+})
+
 const datePriceFen = computed(() => {
-  const base = products.value?.datePassPriceFen ?? 0
+  const base = selectedBatchPriceFen.value
   const act = products.value?.activity
   if (!act || !appliesTo(act.appliesTo, 'DATE')) return base
   return Math.round(base * act.discountPercent / 100)
@@ -396,11 +401,11 @@ onBeforeUnmount(stopPolling)
             </div>
           </header>
           <div class="pc-price">
-            <template v-if="datePriceFen !== (products?.datePassPriceFen ?? 0)">
-              <del>¥{{ fen2yuan(products?.datePassPriceFen ?? 0) }}</del>
+            <template v-if="datePriceFen !== selectedBatchPriceFen">
+              <del>¥{{ fen2yuan(selectedBatchPriceFen) }}</del>
               <strong>¥{{ fen2yuan(datePriceFen) }}</strong>
             </template>
-            <strong v-else>¥{{ fen2yuan(products?.datePassPriceFen ?? 0) }}</strong>
+            <strong v-else>¥{{ fen2yuan(selectedBatchPriceFen) }}</strong>
             <span>/ 日期</span>
           </div>
           <el-select
@@ -413,7 +418,7 @@ onBeforeUnmount(stopPolling)
               v-for="b in purchasableBatches"
               :key="b.batch"
               :value="b.batch"
-              :label="`${b.batch}（${b.papersCount} 套卷）`"
+              :label="`${b.batch}（${b.papersCount} 套卷 · ¥${fen2yuan(b.priceFen)}）`"
             />
           </el-select>
           <p v-if="!purchasableBatches.length" class="pc-hint">

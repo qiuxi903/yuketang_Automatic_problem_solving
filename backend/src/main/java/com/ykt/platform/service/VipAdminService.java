@@ -1,5 +1,6 @@
 package com.ykt.platform.service;
 
+import com.ykt.platform.dto.VipBatchPriceView;
 import com.ykt.platform.dto.VipBindingView;
 import com.ykt.platform.dto.VipCouponCreateRequest;
 import com.ykt.platform.dto.VipCouponView;
@@ -10,6 +11,7 @@ import com.ykt.platform.dto.VipPayNotificationView;
 import com.ykt.platform.dto.VipSettingsUpdateRequest;
 import com.ykt.platform.dto.VipSettingsView;
 import com.ykt.platform.entity.PayNotification;
+import com.ykt.platform.entity.VipBatchPrice;
 import com.ykt.platform.entity.RainBinding;
 import com.ykt.platform.entity.User;
 import com.ykt.platform.entity.VipAccount;
@@ -20,6 +22,7 @@ import com.ykt.platform.entity.VipEntitlement;
 import com.ykt.platform.entity.VipOrder;
 import com.ykt.platform.entity.VipSettings;
 import com.ykt.platform.repository.PayNotificationRepository;
+import com.ykt.platform.repository.VipBatchPriceRepository;
 import com.ykt.platform.repository.RainBindingRepository;
 import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.repository.VipAccountRepository;
@@ -59,7 +62,9 @@ public class VipAdminService {
     private final VipActivityRepository activityRepository;
     private final RainBindingRepository bindingRepository;
     private final PayNotificationRepository notificationRepository;
+    private final VipBatchPriceRepository batchPriceRepository;
     private final VipSettingsRepository settingsRepository;
+    private final AnswerLibService answerLibService;
     private final UserRepository userRepository;
     private final VipAccountRepository vipAccountRepository;
     private final VipService vipService;
@@ -71,7 +76,9 @@ public class VipAdminService {
                            VipActivityRepository activityRepository,
                            RainBindingRepository bindingRepository,
                            PayNotificationRepository notificationRepository,
+                           VipBatchPriceRepository batchPriceRepository,
                            VipSettingsRepository settingsRepository,
+                           AnswerLibService answerLibService,
                            UserRepository userRepository,
                            VipAccountRepository vipAccountRepository,
                            VipService vipService) {
@@ -82,7 +89,9 @@ public class VipAdminService {
         this.activityRepository = activityRepository;
         this.bindingRepository = bindingRepository;
         this.notificationRepository = notificationRepository;
+        this.batchPriceRepository = batchPriceRepository;
         this.settingsRepository = settingsRepository;
+        this.answerLibService = answerLibService;
         this.userRepository = userRepository;
         this.vipAccountRepository = vipAccountRepository;
         this.vipService = vipService;
@@ -300,6 +309,46 @@ public class VipAdminService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "该用户没有绑定记录"));
         bindingRepository.delete(binding);
         log.info("管理员已解绑用户 {} 的雨课堂账号「{}」", userId, binding.getYktName());
+    }
+
+    // ---------- 单日按批次定价 ----------
+
+    /** 全部单独定价的日期（未列出的日期用全局默认价）。 */
+    @Transactional(readOnly = true)
+    public List<VipBatchPriceView> listBatchPrices() {
+        return batchPriceRepository.findAllByOrderByBatchAsc().stream()
+                .map(b -> new VipBatchPriceView(b.getBatch(), b.getPriceFen(), b.getUpdatedAt()))
+                .toList();
+    }
+
+    /** 设置某日期的单日价（upsert）；批次必须存在于答案库。 */
+    @Transactional
+    public VipBatchPriceView setBatchPrice(String batch, int priceFen, Long adminId) {
+        if (batch == null || batch.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "batch 不能为空");
+        }
+        if (priceFen < 1) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "价格需大于 0");
+        }
+        if (answerLibService.paperNames(batch).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批次不存在: " + batch);
+        }
+        VipBatchPrice price = batchPriceRepository.findByBatch(batch).orElseGet(() -> {
+            VipBatchPrice created = new VipBatchPrice();
+            created.setBatch(batch);
+            return created;
+        });
+        price.setPriceFen(priceFen);
+        price.setUpdatedAt(Instant.now());
+        price.setUpdatedBy(adminId);
+        batchPriceRepository.save(price);
+        return new VipBatchPriceView(price.getBatch(), price.getPriceFen(), price.getUpdatedAt());
+    }
+
+    /** 删除某日期的单独定价，恢复全局默认价。 */
+    @Transactional
+    public void deleteBatchPrice(String batch) {
+        batchPriceRepository.deleteByBatch(batch);
     }
 
     // ---------- 活动与设置 ----------
