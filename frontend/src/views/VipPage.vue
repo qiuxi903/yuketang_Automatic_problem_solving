@@ -50,8 +50,6 @@ const nowTick = ref(Date.now())
 const payResult = ref<'success' | null>(null)
 
 const myStats = ref<VipMyStats | null>(null)
-// 演示视频：构建时放在 public/media/ 下（不经 rollup 处理）
-const demoVideoSrc = '/media/vip-demo.mp4'
 const showGuide = ref(true)
 
 const fen2yuan = (fen: number) => (fen / 100).toFixed(2)
@@ -569,8 +567,8 @@ onBeforeUnmount(stopPolling)
         </div>
       </div>
 
-      <!-- 我的 VIP 统计 + 视频教程 + 温馨提示 -->
-      <div class="panels me-row">
+      <!-- 我的 VIP 统计 -->
+      <div class="me-row">
         <div class="panel-card">
           <h4><el-icon><Coin /></el-icon> 我的 VIP 统计</h4>
           <div v-if="myStats" class="me-grid">
@@ -595,13 +593,6 @@ onBeforeUnmount(stopPolling)
               <strong>{{ myStats.monthCardState }}</strong>
             </div>
           </div>
-        </div>
-
-        <div class="panel-card">
-          <h4><el-icon><CreditCard /></el-icon> 如何开通（演示视频）</h4>
-          <video class="demo-video" controls preload="metadata" :src="demoVideoSrc">
-            你的浏览器不支持视频播放，请参考下方文字提示。
-          </video>
         </div>
       </div>
 
@@ -1058,13 +1049,6 @@ export default { name: 'VipPage' }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.demo-video {
-  width: 100%;
-  max-height: 300px;
-  border-radius: var(--r-md);
-  background: var(--ink-950, #111);
-}
-
 .tips-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
