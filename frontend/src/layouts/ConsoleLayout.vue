@@ -353,6 +353,7 @@ function handleLogout() {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex: none;
   cursor: pointer;
   user-select: none;
 }
@@ -427,6 +428,8 @@ function handleLogout() {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* 顶栏右侧按钮组永不收缩：否则窄宽度下被导航挤压，按钮裁掉点不到 */
+  flex: none;
 }
 
 .theme-toggle {
