@@ -343,6 +343,13 @@ function handleLogout() {
   align-items: center;
   gap: 4px;
   flex: 1;
+  /* 平板宽度（769~1100px）空间不足时不许换行堆字：横向滚动兜底 */
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topnav::-webkit-scrollbar {
+  display: none;
 }
 
 .navlink {
@@ -355,6 +362,8 @@ function handleLogout() {
   font-weight: 600;
   color: var(--ink-500);
   cursor: pointer;
+  white-space: nowrap;
+  flex: none;
   transition: background-color 0.16s ease, color 0.16s ease;
 }
 .navlink:hover {
