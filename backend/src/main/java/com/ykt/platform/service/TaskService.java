@@ -27,6 +27,8 @@ import com.ykt.platform.entity.TaskStatus;
 import com.ykt.platform.repository.PaperRepository;
 import com.ykt.platform.repository.TaskItemRepository;
 import com.ykt.platform.repository.TaskRepository;
+import com.ykt.platform.security.AuthUser;
+import com.ykt.platform.security.SecurityUtil;
 import com.ykt.platform.ws.TaskWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -133,6 +135,8 @@ public class TaskService {
         task.setReuseYkt(request.reuseYkt() == null || request.reuseYkt().isBlank()
                 ? null : request.reuseYkt());
         task.setMode(request.mode() == null || request.mode().isBlank() ? "answer" : request.mode());
+        // 取答案（collect）仅管理员开放
+        checkCollectAdminOnly(task.getMode());
         task.setStatus(TaskStatus.PENDING);
         try {
             task.setRedoJson(redo.isEmpty() ? null : objectMapper.writeValueAsString(redo));
@@ -250,6 +254,24 @@ public class TaskService {
         taskRepository.delete(task);
         // 任务已不存在，无法再广播快照；前端按删除结果在本地任务列表剔除
         return OkResponse.of();
+    }
+
+    /** 当前登录用户是否管理员（取答案仅管理员开放的判定用）。 */
+    private boolean currentUserIsAdmin() {
+        try {
+            AuthUser user = SecurityUtil.currentUser();
+            return user != null && "ADMIN".equalsIgnoreCase(user.role());
+        } catch (IllegalStateException ex) {
+            return false;
+        }
+    }
+
+    /** 取答案（collect）仅管理员开放；普通用户建 collect 任务一律拒绝。 */
+    private void checkCollectAdminOnly(String mode) {
+        if ("collect".equalsIgnoreCase(mode) && !currentUserIsAdmin()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "取答案功能仅对管理员开放");
+        }
     }
 
     private boolean isInterruptible(TaskStatus status) {
@@ -373,6 +395,8 @@ public class TaskService {
 
         // 模式后置：登录后确认，缺省沿用任务创建时的模式
         String resolvedMode = (mode == null || mode.isBlank()) ? task.getMode() : mode;
+        // 取答案（collect）仅管理员开放
+        checkCollectAdminOnly(resolvedMode);
         task.setMode(resolvedMode);
         task.setBatch(batch);
         try {

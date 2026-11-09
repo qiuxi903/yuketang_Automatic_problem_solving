@@ -16,8 +16,9 @@ public class WebFiltersConfig {
 
     @Bean
     public FilterRegistrationBean<Filter> agentTokenFilterRegistration(
-            @Value("${ykt.agent-token:}") String token) {
-        FilterRegistrationBean<Filter> reg = new FilterRegistrationBean<>(new AgentTokenFilter(token));
+            @Value("${ykt.agent-token:}") String token,
+            @Value("${ykt.agent-token-file:./data/agent-token}") String tokenFile) {
+        FilterRegistrationBean<Filter> reg = new FilterRegistrationBean<>(new AgentTokenFilter(token, tokenFile));
         reg.setOrder(-95);
         reg.addUrlPatterns("/api/agent/*", "/api/answer/*");
         return reg;
