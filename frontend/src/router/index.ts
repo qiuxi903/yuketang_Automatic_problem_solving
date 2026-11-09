@@ -11,12 +11,6 @@ const router = createRouter({
       meta: { public: true, title: '登录' },
     },
     {
-      path: '/vip',
-      name: 'vip',
-      component: () => import('@/views/VipPage.vue'),
-      meta: { title: 'VIP 会员中心' },
-    },
-    {
       path: '/',
       component: () => import('@/layouts/ConsoleLayout.vue'),
       redirect: { name: 'console' },
@@ -26,6 +20,13 @@ const router = createRouter({
           name: 'console',
           component: () => import('@/views/Console.vue'),
           meta: { title: '做题工作台' },
+        },
+        {
+          // VIP 页挂在 ConsoleLayout 下：手机端保留顶栏与底部 tabbar，不做成全屏独立页
+          path: 'vip',
+          name: 'vip',
+          component: () => import('@/views/VipPage.vue'),
+          meta: { title: 'VIP 会员中心' },
         },
         {
           path: 'community',
