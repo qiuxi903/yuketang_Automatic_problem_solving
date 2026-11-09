@@ -608,6 +608,10 @@ function handleLogout() {
     padding: 0 12px;
     height: 54px;
   }
+  /* 手机端导航隐藏后按钮组失去撑开者：靠右对齐，右边不再空一大片 */
+  .topbar-right {
+    margin-left: auto;
+  }
   .brand-text em,
   .user-chip .caret {
     display: none;
