@@ -33,21 +33,27 @@ public class RateLimitFilter extends OncePerRequestFilter {
             "/api/tasks", new int[]{30, 60_000},
             "/api/sessions", new int[]{20, 60_000});
 
+    /** 读接口（防爬）规则：/api/answer|/api/community GET 60 次/分钟。 */
+    private static final int[] READ_RULE = {60, 60_000};
+
     private final Map<String, Deque<Long>> hits = new ConcurrentHashMap<>();
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        if (!"POST".equalsIgnoreCase(request.getMethod()) && !"PUT".equalsIgnoreCase(request.getMethod())
-                && !"DELETE".equalsIgnoreCase(request.getMethod())) {
+        String method = request.getMethod();
+        String uri = request.getRequestURI();
+        boolean write = "POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method)
+                || "DELETE".equalsIgnoreCase(method);
+        if (write) {
+            for (String prefix : RULES.keySet()) {
+                if (uri.startsWith(prefix)) {
+                    return false;
+                }
+            }
             return true;
         }
-        String uri = request.getRequestURI();
-        for (String prefix : RULES.keySet()) {
-            if (uri.startsWith(prefix)) {
-                return false;
-            }
-        }
-        return true;
+        // 防爬：答案中心读接口也限流（GET 60 次/分钟/IP，正常使用远达不到）
+        return !uri.startsWith("/api/answer/") && !uri.startsWith("/api/community");
     }
 
     @Override
@@ -59,8 +65,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 .map(Map.Entry::getValue)
                 .findFirst().orElse(null);
         if (rule == null) {
-            chain.doFilter(request, response);
-            return;
+            rule = READ_RULE;
         }
         long now = System.currentTimeMillis();
         String key = clientIp(request) + "|" + uri;
