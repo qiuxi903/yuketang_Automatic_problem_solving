@@ -190,15 +190,19 @@ public class VipService {
      * 只要用户手里还有「任何可做题的路」就放行到扫码环节——
      * 月卡在期 / 已解锁过某些日期 / 免费额度还有剩，任一满足即可；
      * 全都没有的话，建了任务也做不了（普通用户会白等扫码），直接拦截引导付费。
-     * collect（取答案）永远放行。
+     * collect（取答案）仅管理员开放（2026-11 起暂停对普通用户开放）。
      */
     @Transactional(readOnly = true)
     public void checkTaskCreationAllowed(Long userId, boolean admin, String mode) {
         if (!properties.enforce()) {
             return;
         }
-        if (admin || "collect".equalsIgnoreCase(mode)) {
+        if (admin) {
             return;
+        }
+        if ("collect".equalsIgnoreCase(mode)) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "取答案功能仅对管理员开放");
         }
         if (monthCardActive(userId)) {
             return;
@@ -217,7 +221,7 @@ public class VipService {
      * 否则抛 {@link VipRequiredException}（→ 402，前端跳付费页）。
      *
      * 收费边界：只有「自动做题」（mode=answer，含缺省）收费；
-     * 「取答案」（mode=collect）与答案中心的浏览/下载永远免费。
+     * collect（取答案）仅管理员开放；答案中心浏览/下载对所有登录用户开放（下载限管理员，见 PaperController）。
      */
     @Transactional(readOnly = true)
     public void checkBatchAccess(Long userId, String batch, boolean admin, String mode) {
@@ -227,9 +231,10 @@ public class VipService {
         if (admin || batch == null || batch.isBlank()) {
             return;
         }
-        // collect=只采答案不自动作答：免费放行
+        // collect=只采答案：仅管理员开放
         if ("collect".equalsIgnoreCase(mode)) {
-            return;
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "取答案功能仅对管理员开放");
         }
         if (batchUnlocked(userId, batch)) {
             return;

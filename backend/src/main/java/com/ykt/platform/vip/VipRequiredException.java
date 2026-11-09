@@ -10,8 +10,8 @@ public class VipRequiredException extends RuntimeException {
 
     public VipRequiredException(String batch) {
         super(batch == null
-                ? "自动做题需要先开通：解锁某个日期（¥3 起）或开通月卡（¥15）；取答案与答案下载免费"
-                : "日期 " + batch + " 尚未解锁：解锁后才能自动做题（取答案与答案下载免费）");
+                ? "自动做题需要先开通：解锁某个日期（¥3 起）或开通月卡（¥15）"
+                : "日期 " + batch + " 尚未解锁：解锁后才能自动做题");
         this.batch = batch;
     }
 
