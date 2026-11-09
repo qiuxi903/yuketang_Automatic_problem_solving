@@ -540,7 +540,7 @@ onMounted(() => void loadTab(activeTab.value))
 
     <el-tabs v-model="activeTab" class="vip-tabs" @tab-change="loadTab">
       <!-- ================= 订单管理 ================= -->
-      <el-tab-pane label="订单管理" name="orders">
+      <el-tab-pane label="订单管理" name="orders" lazy>
         <!-- 统计条：收入 / 订单 / 会员 / 额度 / 优惠码 -->
         <div v-if="stats" class="vip-stats">
           <div class="vs-cell">
@@ -703,7 +703,7 @@ onMounted(() => void loadTab(activeTab.value))
       </el-tab-pane>
 
       <!-- ================= 优惠码 ================= -->
-      <el-tab-pane label="优惠码" name="coupons">
+      <el-tab-pane label="优惠码" name="coupons" lazy>
         <div class="toolbar">
           <span class="stats">共 {{ coupons.length }} 个码</span>
           <div class="toolbar-actions">
@@ -837,7 +837,7 @@ onMounted(() => void loadTab(activeTab.value))
       </el-tab-pane>
 
       <!-- ================= 活动与支付设置 ================= -->
-      <el-tab-pane label="支付与活动" name="pay">
+      <el-tab-pane label="支付与活动" name="pay" lazy>
         <div class="pay-grid">
           <div class="panel-card">
             <h4>定价与收款渠道</h4>
@@ -962,6 +962,7 @@ onMounted(() => void loadTab(activeTab.value))
                 type="datetimerange"
                 start-placeholder="开始时间"
                 end-placeholder="结束时间"
+                class="w-full"
               />
             </el-form-item>
           </el-form>
@@ -973,7 +974,7 @@ onMounted(() => void loadTab(activeTab.value))
       </el-tab-pane>
 
       <!-- ================= 用户权益与绑定 ================= -->
-      <el-tab-pane label="用户权益" name="users">
+      <el-tab-pane label="用户权益" name="users" lazy>
         <div class="pay-grid">
           <div class="panel-card">
             <h4>发放权益</h4>

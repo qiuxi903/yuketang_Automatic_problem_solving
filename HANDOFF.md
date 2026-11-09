@@ -82,6 +82,8 @@
 3. worktree 缺 answer-lib → `/api/vip/products` batches 为空 → 付费页日期下拉是空的
 3b. **Windows 下运行中的 jar 被锁定：`mvn clean package` 会静默失败继续跑旧 jar**——先停后端（含孤儿 java 进程，`netstat -ano | grep 28080` 查 PID 再 taskkill）再打包
 3c. 前端 dev server 是父子进程结构，TaskStop/杀父进程会留孤儿 vite 占 25173（服务旧代码白屏/旧页面）——按端口查 PID `taskkill //PID <pid> //F //T` 连子进程一起杀
+3d. **手机端整页排版变宽/内容右缘被裁的根因**：ConsoleLayout `.shell-body > *` 是 flex 子项，默认 min-width:auto 下会被宽内容（el-table 最小内容宽等）撑破布局宽度——已加 `min-width:0` 修复；新增布局必须保证 flex 链上每级都有 min-width:0
+3e. AdminVip 四个 el-tab-pane 已加 `lazy`：非激活页签不渲染 DOM，避免隐藏容器里 el-table 按内容宽度初始化（同时首屏更轻）；main.css 移动端有 `html,body{overflow-x:clip}` 兜底，页面不应再出现横向滑动
 4. GBK 控制台打印 ✓/✗ 会 UnicodeEncodeError——脚本里 `sys.stdout.reconfigure(encoding="utf-8")` 或 `PYTHONIOENCODING=utf-8`
 5. el-table 模板槽 `{ row }` 是 any，直接 `map[row.x]` 会 vue-tsc TS7053——包一层类型化辅助函数
 6. main 的坑全部继承：H2 单实例、端口 bind 探测、uvicorn 按端口补刀、轮询 catch 不要 stop、答案按题号对齐、egui 尺寸下限等（见 main HANDOFF）
