@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Check, Coin, CreditCard, MagicStick, Medal, Trophy } from '@element-plus/icons-vue'
+import { ArrowLeft, Check, Coin, CreditCard, MagicStick, Refresh, Trophy } from '@element-plus/icons-vue'
 import {
   cancelVipOrder,
   claimVipOrderPaid,
@@ -49,7 +49,6 @@ const payResult = ref<'success' | null>(null)
 
 const fen2yuan = (fen: number) => (fen / 100).toFixed(2)
 
-const unlockedSet = computed(() => new Set(status.value?.unlockedBatches ?? []))
 const purchasableBatches = computed(
   () => products.value?.batches.filter((b) => !b.unlocked) ?? [],
 )
@@ -72,7 +71,7 @@ function appliesTo(kind: 'DATE' | 'MONTH' | 'ALL', target: 'DATE' | 'MONTH') {
   return kind === 'ALL' || kind === target
 }
 
-/** hero 展示的已解锁日期：前 3 个 + 剩余数量 */
+/** 已解锁日期展示：前 3 个 + 剩余数量 */
 const unlockedChips = computed(() => {
   const list = status.value?.unlockedBatches ?? []
   return { shown: list.slice(0, 3), extra: Math.max(0, list.length - 3) }
@@ -82,6 +81,36 @@ const monthDaysLeft = computed(() => {
   const expires = status.value?.monthCardExpiresAt
   if (!expires || !status.value?.monthCardActive) return 0
   return Math.max(0, Math.ceil((new Date(expires).getTime() - Date.now()) / 86400000))
+})
+
+/* 权益状态卡（与概览页 stat-card 同款） */
+const statusCards = computed(() => {
+  const s = status.value
+  if (!s) return []
+  return [
+    {
+      label: '月卡',
+      value: s.monthCardActive ? `剩 ${monthDaysLeft.value} 天` : '未开通',
+      sub: s.monthCardActive && s.monthCardExpiresAt ? `到期 ${formatDateTime(s.monthCardExpiresAt)}` : '期内所有日期无限做',
+    },
+    {
+      label: '免费额度',
+      value: `${s.freeQuota} 次`,
+      sub: '可解锁任意一个日期',
+    },
+    {
+      label: '已解锁日期',
+      value: `${s.unlockedBatches.length} 个`,
+      sub: unlockedChips.value.shown.length
+        ? unlockedChips.value.shown.join(' / ') + (unlockedChips.value.extra ? ` 等 ${unlockedChips.value.extra} 个` : '')
+        : '解锁后永久可用',
+    },
+    {
+      label: '绑定雨课堂',
+      value: s.boundYktName || '待绑定',
+      sub: s.boundYktName ? '1:1 绑定，解绑需管理员' : '首次扫码登录自动绑定',
+    },
+  ]
 })
 
 /* 支付弹层倒计时（mm:ss）；到期自动停轮询并提示重新下单 */
@@ -171,8 +200,7 @@ function startPolling() {
   pollTimer = window.setInterval(async () => {
     if (!activeOrder.value) return
     try {
-      const fresh = ordersRefresh()
-      const list = await fresh
+      const list = await ordersRefresh()
       const target = list.find((o) => o.orderNo === activeOrder.value?.orderNo)
       if (target) activeOrder.value = target
       if (target && target.status === 'PAID') {
@@ -325,270 +353,245 @@ onBeforeUnmount(stopPolling)
 </script>
 
 <template>
-  <div class="vip-page">
-    <!-- —— 顶部金质横幅 —— -->
-    <header class="hero">
-      <div class="hero-inner">
-        <button class="back" type="button" @click="backToConsole">
-          <el-icon><ArrowLeft /></el-icon>
-          <span>返回做题台</span>
-        </button>
-
-        <div class="hero-copy">
-          <span class="hero-badge"><el-icon><Trophy /></el-icon>MEMBERSHIP</span>
-          <h1>解锁全部题库，<em>一次付费长期有效</em></h1>
-          <p>
-            单日卡按日期解锁，一个日期只需付一次钱；月卡期内无限做题。
-            答案中心的答案浏览与下载<b>永远免费</b>，付费功能只有自动做题。
+  <div v-loading="loading" class="vip-page">
+    <div class="page-inner">
+      <!-- 页头：与全站 page-head 同款 -->
+      <header class="page-head">
+        <div>
+          <span class="eyebrow">VIP 会员中心</span>
+          <h2>解锁日期与月卡</h2>
+          <p class="page-sub">
+            自动做题按日期解锁，一次付费永久可用；月卡期内所有日期无限做。
+            答案中心浏览与下载永远免费。
             <template v-if="products?.activity">
               限时活动「{{ products.activity.name }}」进行中，全场
               <strong>{{ (products.activity.discountPercent / 10).toFixed(1) }} 折</strong>。
             </template>
           </p>
         </div>
+        <div class="head-actions">
+          <el-button :icon="Refresh" @click="refresh">刷新</el-button>
+          <el-button :icon="ArrowLeft" @click="backToConsole">返回做题台</el-button>
+        </div>
+      </header>
 
-        <div v-if="status" class="hero-status">
-          <div class="stat">
-            <span class="stat-label"><el-icon><Medal /></el-icon> 月卡</span>
-            <strong v-if="status.monthCardActive" class="stat-gold">
-              剩 {{ monthDaysLeft }} 天
-            </strong>
-            <strong v-else>未开通</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label"><el-icon><Coin /></el-icon> 免费额度</span>
-            <strong>{{ status.freeQuota }} 次</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label"><el-icon><Check /></el-icon> 已解锁日期</span>
-            <strong>{{ status.unlockedBatches.length }} 个</strong>
-            <em v-if="unlockedChips.shown.length" class="stat-chips">
-              <span v-for="b in unlockedChips.shown" :key="b" class="chip">{{ b }}</span>
-              <span v-if="unlockedChips.extra" class="chip chip-more">+{{ unlockedChips.extra }}</span>
-            </em>
-          </div>
-          <div class="stat">
-            <span class="stat-label">绑定雨课堂</span>
-            <strong>{{ status.boundYktName || '首次扫码自动绑定' }}</strong>
-          </div>
+      <!-- 权益状态：与概览页 stat-card 同款 -->
+      <div v-if="status" class="stat-grid">
+        <div v-for="card in statusCards" :key="card.label" class="stat-card">
+          <span class="stat-label">{{ card.label }}</span>
+          <strong class="stat-value">{{ card.value }}</strong>
+          <span class="stat-sub">{{ card.sub }}</span>
         </div>
       </div>
-    </header>
 
-    <main class="body">
-      <section v-loading="loading" class="content">
-        <!-- —— 定价区 —— -->
-        <div class="pricing">
-          <!-- 单日卡 -->
-          <div class="price-card">
-            <header class="pc-head">
-              <span class="pc-icon"><el-icon><CreditCard /></el-icon></span>
-              <div>
-                <h3>单日解锁</h3>
-                <p>解锁指定日期的全部卷子 · 永久可用</p>
-              </div>
-            </header>
-            <div class="pc-price">
-              <template v-if="datePriceFen !== (products?.datePassPriceFen ?? 0)">
-                <del>¥{{ fen2yuan(products?.datePassPriceFen ?? 0) }}</del>
-                <strong>¥{{ fen2yuan(datePriceFen) }}</strong>
-              </template>
-              <strong v-else>¥{{ fen2yuan(products?.datePassPriceFen ?? 0) }}</strong>
-              <span>/ 日期</span>
+      <!-- 定价区 -->
+      <div class="pricing">
+        <!-- 单日解锁 -->
+        <div class="price-card">
+          <header class="pc-head">
+            <span class="pc-icon"><el-icon><CreditCard /></el-icon></span>
+            <div>
+              <h3>单日解锁</h3>
+              <p>解锁指定日期的全部卷子 · 永久可用</p>
             </div>
-            <el-select
-              v-model="pickBatch"
-              placeholder="选择要解锁的日期"
-              class="pc-select"
+          </header>
+          <div class="pc-price">
+            <template v-if="datePriceFen !== (products?.datePassPriceFen ?? 0)">
+              <del>¥{{ fen2yuan(products?.datePassPriceFen ?? 0) }}</del>
+              <strong>¥{{ fen2yuan(datePriceFen) }}</strong>
+            </template>
+            <strong v-else>¥{{ fen2yuan(products?.datePassPriceFen ?? 0) }}</strong>
+            <span>/ 日期</span>
+          </div>
+          <el-select
+            v-model="pickBatch"
+            placeholder="选择要解锁的日期"
+            class="pc-select"
+            size="large"
+          >
+            <el-option
+              v-for="b in purchasableBatches"
+              :key="b.batch"
+              :value="b.batch"
+              :label="`${b.batch}（${b.papersCount} 套卷）`"
+            />
+          </el-select>
+          <p v-if="!purchasableBatches.length" class="pc-hint">
+            当前题库日期都已解锁，直接回做题台开做即可
+          </p>
+          <ul class="pc-list">
+            <li><el-icon><Check /></el-icon>该日期下所有卷子自动做题、无限次重做</li>
+            <li><el-icon><Check /></el-icon>一次付费，永久解锁该日期</li>
+            <li><el-icon><Check /></el-icon>取答案不限；答案中心下载永远免费</li>
+          </ul>
+          <el-button
+            type="primary"
+            size="large"
+            class="pc-buy"
+            :disabled="!purchasableBatches.length"
+            :loading="buying"
+            @click="buyDatePass"
+          >
+            解锁所选日期
+          </el-button>
+          <el-button
+            v-if="status && status.freeQuota > 0"
+            size="large"
+            class="pc-buy"
+            plain
+            :disabled="!pickBatch"
+            :loading="quotaUnlocking"
+            @click="unlockByQuota"
+          >
+            用免费额度解锁（剩 {{ status.freeQuota }} 次）
+          </el-button>
+        </div>
+
+        <!-- 月卡 -->
+        <div class="price-card is-month">
+          <span class="pc-ribbon">推荐</span>
+          <header class="pc-head">
+            <span class="pc-icon is-month"><el-icon><Trophy /></el-icon></span>
+            <div>
+              <h3>月卡会员</h3>
+              <p>{{ products?.monthDays ?? 30 }} 天内所有日期无限做题</p>
+            </div>
+          </header>
+          <div class="pc-price">
+            <template v-if="monthPriceFen !== (products?.monthPriceFen ?? 0)">
+              <del>¥{{ fen2yuan(products?.monthPriceFen ?? 0) }}</del>
+              <strong>¥{{ fen2yuan(monthPriceFen) }}</strong>
+            </template>
+            <strong v-else>¥{{ fen2yuan(products?.monthPriceFen ?? 0) }}</strong>
+            <span>/ {{ products?.monthDays ?? 30 }} 天</span>
+          </div>
+          <div class="pc-month-placeholder">
+            全部日期 · 全部卷子 · 期内无限做
+          </div>
+          <ul class="pc-list">
+            <li><el-icon><Check /></el-icon>所有日期批次全部解锁</li>
+            <li><el-icon><Check /></el-icon>期内新上线的日期自动可用</li>
+            <li><el-icon><Check /></el-icon>到期前续费自动顺延</li>
+          </ul>
+          <el-button type="primary" size="large" class="pc-buy" :loading="buying" @click="buyMonthCard">
+            开通月卡
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 优惠码 + 兑换中心（panel-card 与管理后台同款） -->
+      <div class="panels">
+        <div class="panel-card">
+          <h4><el-icon><MagicStick /></el-icon> 优惠码</h4>
+          <p class="panel-hint">有优惠码就先填上，下单时自动按最优折扣计算（与活动不叠加，取更便宜的）。</p>
+          <el-input
+            v-model="couponInput"
+            placeholder="例如 YH-AB2C-3DEF"
+            size="large"
+            clearable
+          />
+        </div>
+
+        <div class="panel-card">
+          <h4><el-icon><Coin /></el-icon> 兑换中心</h4>
+          <p class="panel-hint">
+            月卡兑换码 / 额度码直接兑换秒到账；单日兑换码需选好日期再兑。
+          </p>
+          <div class="coupon-row">
+            <el-input
+              v-model="redeemCode"
+              placeholder="输入兑换码"
               size="large"
+              clearable
+              class="coupon-input"
+              @keyup.enter="redeem"
+            />
+            <el-select
+              v-model="redeemBatch"
+              placeholder="解锁日期（单日码）"
+              size="large"
+              class="redeem-batch"
             >
               <el-option
                 v-for="b in purchasableBatches"
                 :key="b.batch"
                 :value="b.batch"
-                :label="`${b.batch}（${b.papersCount} 套卷）`"
+                :label="b.batch"
               />
             </el-select>
-            <p v-if="!purchasableBatches.length" class="pc-hint">
-              当前题库日期都已解锁，直接回做题台开做即可
-            </p>
-            <ul class="pc-list">
-              <li><el-icon><Check /></el-icon>该日期下所有卷子自动做题、无限次重做</li>
-              <li><el-icon><Check /></el-icon>一次付费，永久解锁该日期</li>
-              <li><el-icon><Check /></el-icon>取答案不限；答案中心下载永远免费</li>
-            </ul>
-            <el-button
-              type="warning"
-              size="large"
-              class="pc-buy"
-              :disabled="!purchasableBatches.length"
-              :loading="buying"
-              @click="buyDatePass"
-            >
-              解锁所选日期
-            </el-button>
-            <el-button
-              v-if="status && status.freeQuota > 0"
-              size="large"
-              class="pc-buy"
-              plain
-              :disabled="!pickBatch"
-              :loading="quotaUnlocking"
-              @click="unlockByQuota"
-            >
-              用免费额度解锁（剩 {{ status.freeQuota }} 次）
-            </el-button>
-          </div>
-
-          <!-- 月卡 -->
-          <div class="price-card is-month">
-            <span class="pc-ribbon">推荐</span>
-            <header class="pc-head">
-              <span class="pc-icon"><el-icon><Trophy /></el-icon></span>
-              <div>
-                <h3>月卡会员</h3>
-                <p>{{ products?.monthDays ?? 30 }} 天内所有日期无限做题</p>
-              </div>
-            </header>
-            <div class="pc-price">
-              <template v-if="monthPriceFen !== (products?.monthPriceFen ?? 0)">
-                <del>¥{{ fen2yuan(products?.monthPriceFen ?? 0) }}</del>
-                <strong>¥{{ fen2yuan(monthPriceFen) }}</strong>
-              </template>
-              <strong v-else>¥{{ fen2yuan(products?.monthPriceFen ?? 0) }}</strong>
-              <span>/ {{ products?.monthDays ?? 30 }} 天</span>
-            </div>
-            <div class="pc-month-placeholder">
-              全部日期 · 全部卷子 · 期内无限做
-            </div>
-            <ul class="pc-list">
-              <li><el-icon><Check /></el-icon>所有日期批次全部解锁</li>
-              <li><el-icon><Check /></el-icon>期内新上线的日期自动可用</li>
-              <li><el-icon><Check /></el-icon>到期前续费自动顺延</li>
-            </ul>
-            <el-button type="warning" size="large" class="pc-buy" :loading="buying" @click="buyMonthCard">
-              开通月卡
+            <el-button type="primary" size="large" :loading="redeeming" @click="redeem">
+              兑换
             </el-button>
           </div>
         </div>
+      </div>
 
-        <!-- —— 优惠码 + 兑换中心 —— -->
-        <div class="panels">
-          <div class="panel">
-            <h4><el-icon><MagicStick /></el-icon> 优惠码</h4>
-            <p class="panel-hint">有优惠码就先填上，下单时自动按最优折扣计算（与活动不叠加，取更便宜的）。</p>
-            <div class="coupon-row">
-              <el-input
-                v-model="couponInput"
-                placeholder="例如 YH-AB2C-3DEF"
-                size="large"
-                clearable
-                class="coupon-input"
-              />
-            </div>
-          </div>
-
-          <div class="panel">
-            <h4><el-icon><Coin /></el-icon> 兑换中心</h4>
-            <p class="panel-hint">
-              月卡兑换码 / 额度码直接兑换秒到账；单日兑换码需选好日期再兑。
-            </p>
-            <div class="coupon-row">
-              <el-input
-                v-model="redeemCode"
-                placeholder="输入兑换码"
-                size="large"
-                clearable
-                class="coupon-input"
-                @keyup.enter="redeem"
-              />
-              <el-select
-                v-model="redeemBatch"
-                placeholder="解锁日期（单日码）"
-                size="large"
-                class="redeem-batch"
-              >
-                <el-option
-                  v-for="b in purchasableBatches"
-                  :key="b.batch"
-                  :value="b.batch"
-                  :label="b.batch"
-                />
-              </el-select>
-              <el-button type="warning" size="large" :loading="redeeming" @click="redeem">
-                兑换
-              </el-button>
-            </div>
-          </div>
-        </div>
-
-        <!-- —— 订单记录 —— -->
-        <div v-if="orders.length" class="orders">
-          <h4 class="orders-title">我的订单</h4>
-          <el-table :data="orders" size="large" class="orders-table mobile-hide">
-            <el-table-column prop="orderNo" label="订单号" min-width="150" show-overflow-tooltip />
-            <el-table-column label="商品" min-width="140">
-              <template #default="{ row }">{{ kindLabel(row) }}</template>
-            </el-table-column>
-            <el-table-column label="实付" width="110">
-              <template #default="{ row }">
-                <span class="mono">¥{{ fen2yuan(row.payableFen) }}</span>
-              </template>
-            </el-table-column>
-            <el-table-column label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="orderMetaOf(row).tone" effect="light">
-                  {{ orderMetaOf(row).label }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column label="创建时间" width="170">
-              <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
-            </el-table-column>
-            <el-table-column label="操作" width="130" fixed="right">
-              <template #default="{ row }">
-                <el-button
-                  v-if="row.status === 'CREATED'"
-                  size="small"
-                  type="warning"
-                  plain
-                  @click="openPayDialog(row)"
-                >
-                  继续支付
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <!-- 手机卡片 -->
-          <ul class="orders-cards mobile-only">
-            <li v-for="row in orders" :key="row.id" class="order-card">
-              <div class="oc-top">
-                <strong>{{ kindLabel(row) }}</strong>
-                <el-tag :type="orderMetaOf(row).tone" effect="light">
-                  {{ orderMetaOf(row).label }}
-                </el-tag>
-              </div>
-              <div class="oc-sub">
-                <span class="mono">¥{{ fen2yuan(row.payableFen) }}</span>
-                <span>{{ formatDateTime(row.createdAt) }}</span>
-              </div>
+      <!-- 订单记录 -->
+      <div v-if="orders.length" class="orders">
+        <h4 class="orders-title">我的订单</h4>
+        <el-table :data="orders" size="large" class="orders-table mobile-hide">
+          <el-table-column prop="orderNo" label="订单号" min-width="150" show-overflow-tooltip />
+          <el-table-column label="商品" min-width="140">
+            <template #default="{ row }">{{ kindLabel(row) }}</template>
+          </el-table-column>
+          <el-table-column label="实付" width="110">
+            <template #default="{ row }">
+              <span class="money">¥{{ fen2yuan(row.payableFen) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="orderMetaOf(row).tone" effect="light">
+                {{ orderMetaOf(row).label }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="创建时间" width="170">
+            <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="130" fixed="right">
+            <template #default="{ row }">
               <el-button
                 v-if="row.status === 'CREATED'"
                 size="small"
-                type="warning"
+                type="primary"
                 plain
                 @click="openPayDialog(row)"
               >
                 继续支付
               </el-button>
-            </li>
-          </ul>
-        </div>
+            </template>
+          </el-table-column>
+        </el-table>
 
-        <p v-if="status?.payNote" class="pay-note">{{ status.payNote }}</p>
-      </section>
-    </main>
+        <!-- 手机卡片 -->
+        <ul class="orders-cards mobile-only">
+          <li v-for="row in orders" :key="row.id" class="order-card">
+            <div class="oc-top">
+              <strong>{{ kindLabel(row) }}</strong>
+              <el-tag :type="orderMetaOf(row).tone" effect="light">
+                {{ orderMetaOf(row).label }}
+              </el-tag>
+            </div>
+            <div class="oc-sub">
+              <span class="money">¥{{ fen2yuan(row.payableFen) }}</span>
+              <span>{{ formatDateTime(row.createdAt) }}</span>
+            </div>
+            <el-button
+              v-if="row.status === 'CREATED'"
+              size="small"
+              type="primary"
+              plain
+              @click="openPayDialog(row)"
+            >
+              继续支付
+            </el-button>
+          </li>
+        </ul>
+      </div>
+
+      <p v-if="status?.payNote" class="pay-note">{{ status.payNote }}</p>
+    </div>
 
     <!-- —— 支付弹层 —— -->
     <el-dialog
@@ -612,7 +615,7 @@ onBeforeUnmount(stopPolling)
             {{ activeOrder.kind === 'DATE_PASS' ? `日期 ${activeOrder.targetBatch} 已解锁` : '月卡已生效' }}，
             回做题台即可继续做题。
           </p>
-          <el-button type="warning" size="large" @click="payOpen = false; backToConsole()">
+          <el-button type="primary" size="large" @click="payOpen = false; backToConsole()">
             回去做题
           </el-button>
         </div>
@@ -645,7 +648,7 @@ onBeforeUnmount(stopPolling)
               管理员尚未上传收款码：请按上方金额联系管理员支付，到账后自动开通。
             </template>
             <template v-else-if="activeOrder.payChannel === 'MANUAL'">
-              人工确认渠道：请按上方金额向管理员支付，支付完成后点「我已完成付款」，管理员确认后立即开通。
+              人工确认渠道：请按上方金额向管理员支付，支付完成后点「我已支付，核实到账」，管理员确认后立即开通。
             </template>
             <template v-else>
               虎皮椒支付渠道已选择，但支付页尚未接入跳转——请管理员完成渠道联调，或切回收款码/人工渠道。
@@ -662,7 +665,7 @@ onBeforeUnmount(stopPolling)
 
           <div class="pd-actions">
             <el-button size="large" @click="cancelActiveOrder">取消订单</el-button>
-            <el-button size="large" type="warning" plain @click="claimPaid">我已支付，核实到账</el-button>
+            <el-button size="large" type="primary" plain @click="claimPaid">我已支付，核实到账</el-button>
           </div>
           <el-alert
             v-if="claimHint"
@@ -683,138 +686,88 @@ export default { name: 'VipPage' }
 </script>
 
 <style scoped>
+/* 与全站统一：page-inner 版心 + page-head + stat-card + panel-card，无独立品牌渐变 */
 .vip-page {
   height: 100%;
   overflow-y: auto;
   background: var(--paper);
 }
-
-/* —— 顶部横幅 —— */
-.hero {
-  background:
-    radial-gradient(720px 300px at 88% -40%, rgba(255, 255, 255, 0.2), transparent 70%),
-    linear-gradient(150deg, #8a5a08, var(--amber) 55%, #e09a2b);
-  color: #fff;
-}
-.hero-inner {
+.page-inner {
   max-width: 1020px;
   margin: 0 auto;
-  padding: 26px 24px 30px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-.back {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  padding: 7px 14px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.16);
-  color: #fff;
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.16s ease;
-}
-.back:hover {
-  background: rgba(255, 255, 255, 0.28);
+  padding: 20px 24px 48px;
 }
 
-.hero-copy h1 {
-  margin: 12px 0 8px;
-  font-size: 30px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-.hero-copy h1 em {
-  font-style: normal;
-  color: #ffe9b8;
+.page-head .eyebrow {
+  color: var(--amber);
 }
-.hero-copy p {
+.page-head h2 {
+  margin: 6px 0;
+}
+.page-sub {
   margin: 0;
   max-width: 640px;
-  font-size: 13.5px;
-  line-height: 1.75;
-  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink-500);
 }
-.hero-copy p strong {
-  color: #ffe9b8;
+.page-sub strong {
+  color: var(--amber);
 }
-.hero-badge {
-  display: inline-flex;
+.head-actions {
+  display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  gap: 8px;
+  flex: none;
 }
 
-.hero-status {
+/* —— 权益状态卡（与概览页 stat-card 同款） —— */
+.stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 18px;
 }
-.stat {
+.stat-card {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(2px);
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-xs);
+  min-width: 0;
 }
 .stat-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.78);
+  font-size: 12.5px;
+  color: var(--ink-400);
 }
-.stat strong {
-  font-size: 15px;
-  font-weight: 800;
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--ink-900);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.stat-gold {
-  color: #ffe9b8;
-}
-.stat-chips {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  margin-top: 2px;
-}
-.chip {
-  padding: 1px 7px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.2);
-  font-size: 10.5px;
-  font-weight: 700;
-  font-style: normal;
-}
-.chip-more {
-  background: rgba(255, 255, 255, 0.12);
+.stat-sub {
+  font-size: 12px;
+  color: var(--ink-500);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* —— 主体 —— */
-.body {
-  padding: 26px 24px 48px;
-}
-.content {
-  max-width: 1020px;
-  margin: 0 auto;
-  min-height: 260px;
-}
-
+/* —— 定价卡（白卡片 + 主色边框标注推荐，无大面积色块） —— */
 .pricing {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -829,11 +782,11 @@ export default { name: 'VipPage' }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-xl);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
 }
 .price-card.is-month {
-  border-color: var(--amber);
-  box-shadow: 0 6px 24px rgba(194, 118, 14, 0.16);
+  border-color: var(--accent);
+  box-shadow: var(--shadow-sm);
 }
 .pc-ribbon {
   position: absolute;
@@ -841,12 +794,12 @@ export default { name: 'VipPage' }
   right: 18px;
   padding: 3px 12px;
   border-radius: 99px;
-  background: var(--amber);
+  background: var(--accent);
   color: #fff;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-xs);
 }
 .pc-head {
   display: flex;
@@ -860,9 +813,13 @@ export default { name: 'VipPage' }
   height: 40px;
   flex: none;
   border-radius: 12px;
+  background: var(--accent-100);
+  color: var(--accent-700);
+  font-size: 20px;
+}
+.pc-icon.is-month {
   background: var(--amber-050);
   color: var(--amber);
-  font-size: 20px;
 }
 .pc-head h3 {
   margin: 0 0 2px;
@@ -879,9 +836,9 @@ export default { name: 'VipPage' }
   gap: 8px;
 }
 .pc-price strong {
-  font-size: 34px;
+  font-size: 32px;
   font-weight: 800;
-  color: var(--amber);
+  color: var(--ink-900);
   letter-spacing: -0.02em;
 }
 .pc-price del {
@@ -898,8 +855,8 @@ export default { name: 'VipPage' }
 .pc-month-placeholder {
   padding: 9px 14px;
   border-radius: var(--r-sm);
-  background: var(--amber-050);
-  color: var(--amber);
+  background: var(--surface-3);
+  color: var(--ink-600);
   font-size: 13px;
   font-weight: 600;
 }
@@ -924,35 +881,38 @@ export default { name: 'VipPage' }
   color: var(--ink-600);
 }
 .pc-list li .el-icon {
-  color: var(--amber);
+  color: var(--accent);
 }
 .pc-buy {
   width: 100%;
   margin-top: auto;
 }
+.pc-buy + .pc-buy {
+  margin-left: 0;
+}
 
-/* —— 优惠码 / 兑换 —— */
+/* —— 优惠码 / 兑换（panel-card 与管理后台同款） —— */
 .panels {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
   margin-top: 18px;
 }
-.panel {
+.panel-card {
   padding: 18px 20px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
 }
-.panel h4 {
+.panel-card h4 {
   display: flex;
   align-items: center;
   gap: 7px;
   margin: 0 0 6px;
   font-size: 15px;
 }
-.panel h4 .el-icon {
-  color: var(--amber);
+.panel-card h4 .el-icon {
+  color: var(--accent-700);
 }
 .panel-hint {
   margin: 0 0 12px;
@@ -1015,7 +975,14 @@ export default { name: 'VipPage' }
   color: var(--ink-500);
 }
 
-/* —— 支付弹层 —— */
+/* 金额统一用琥珀色（与管理后台实付列同款） */
+.money {
+  font-family: var(--font-mono, monospace);
+  font-weight: 700;
+  color: var(--amber);
+}
+
+/* —— 支付弹层（白卡片，无品牌色块） —— */
 .pd-title {
   font-size: 16px;
   font-weight: 700;
@@ -1037,7 +1004,7 @@ export default { name: 'VipPage' }
   color: var(--ink-500);
 }
 .pd-amount strong {
-  font-size: 40px;
+  font-size: 38px;
   font-weight: 800;
   color: var(--amber);
   letter-spacing: -0.02em;
@@ -1121,15 +1088,15 @@ export default { name: 'VipPage' }
 .pd-actions .el-button {
   flex: 1;
 }
+.pd-claim-hint {
+  width: 100%;
+}
 .pd-hint {
   margin: 0;
   font-size: 12px;
   line-height: 1.6;
   color: var(--ink-400);
   text-align: center;
-}
-.pd-claim-hint {
-  width: 100%;
 }
 .pd-success {
   display: flex;
@@ -1159,30 +1126,25 @@ export default { name: 'VipPage' }
   color: var(--ink-500);
 }
 
-.mono {
-  font-family: var(--font-mono, monospace);
-}
-
-/* —— 暗色微调 —— */
-html.dark .hero {
-  background:
-    radial-gradient(720px 300px at 88% -40%, rgba(255, 255, 255, 0.12), transparent 70%),
-    linear-gradient(150deg, #4b3207, #7d5510 55%, #9a6a15);
-}
-
-/* —— 移动端 —— */
+/* —— 移动端：与全站同款断点，单列自适应 —— */
 @media (max-width: 768px) {
-  .hero-inner {
-    padding: 18px 16px 22px;
-  }
-  .hero-copy h1 {
-    font-size: 22px;
-  }
-  .hero-status {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .body {
+  .page-inner {
     padding: 16px 14px 34px;
+  }
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .stat-card {
+    padding: 14px 16px;
+  }
+  .stat-value {
+    font-size: 22px;
   }
   .pricing,
   .panels {
@@ -1191,7 +1153,7 @@ html.dark .hero {
   .coupon-row {
     flex-wrap: wrap;
   }
-  .coupon-input {
+  .coupon-row .el-input {
     flex: 1 1 100%;
   }
   .redeem-batch {

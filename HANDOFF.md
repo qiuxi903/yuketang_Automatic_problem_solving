@@ -43,6 +43,12 @@
 - AdminVip 订单页顶部统计条（含纯 CSS 迷你柱图）；AdminOverview 首卡「VIP 收入」（AdminOverviewResponse 加 vipRevenueFen/vipPendingOrders/vipMonthActiveUsers）
 - 付费页 hero 显示已解锁日期 chips（前 3 + N）；支付弹层倒计时到期自动停轮询并提示重新下单
 
+### UI 统一原则（后续改版必须遵守）
+- 全站设计语言 = 设计系统 v2：page-head（eyebrow + h2 + page-sub + 按钮组）、白卡片 stat-card/panel-card、
+  主色晴空蓝 CTA、琥珀色只做「金额数字 / VIP 小标记」点缀；**禁止大面积品牌渐变色块**（初版金色 hero 已按用户要求重做成统一版式）
+- 付费页 /vip 与管理后台/概览页同构：page-inner 版心（max-width 1020）+ stat-grid 四卡 + 定价卡（推荐=主色蓝边+蓝角标）
+- 金额颜色规则：琥珀 --amber（VipPage 价格/实付、AdminVip payable、支付弹层应付大字）
+
 ### 支付页 / 运营后台
 - `/vip`（VipPage.vue）：金色 hero + 权益状态 + 双定价卡（活动划线价）+ 收款码支付弹层（精确金额/倒计时/3s轮询/成功态）+ 优惠码 + 兑换中心 + 免费额度一键解锁 + 订单记录；暗色/移动端适配
 - `/admin/vip`（AdminVip.vue）四页签：订单管理（确认/拒单/粘贴核销）、优惠码（批量生成四类码）、支付与活动（价格/渠道/收款码上传/监听令牌/限时活动）、用户权益（发月卡/调额度/解绑/撤销）

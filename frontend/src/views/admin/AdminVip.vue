@@ -1327,7 +1327,7 @@ onMounted(() => void loadTab(activeTab.value))
   white-space: nowrap;
 }
 .vs-cell strong.vs-gold {
-  color: var(--amber);
+  color: var(--ink-900);
 }
 .vs-cell em {
   font-style: normal;
@@ -1362,8 +1362,8 @@ onMounted(() => void loadTab(activeTab.value))
   max-width: 12px;
   min-width: 5px;
   border-radius: 3px 3px 0 0;
-  background: var(--amber);
-  opacity: 0.85;
+  background: var(--accent);
+  opacity: 0.9;
 }
 .vs-bar-date {
   font-size: 9px;
