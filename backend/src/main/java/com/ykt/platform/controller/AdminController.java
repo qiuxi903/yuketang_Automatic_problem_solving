@@ -8,6 +8,7 @@ import com.ykt.platform.dto.UpdateUserRoleRequest;
 import com.ykt.platform.service.AdminService;
 import com.ykt.platform.service.TaskService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,10 +24,19 @@ public class AdminController {
 
     private final AdminService adminService;
     private final TaskService taskService;
+    private final com.ykt.platform.service.BackupService backupService;
 
-    public AdminController(AdminService adminService, TaskService taskService) {
+    public AdminController(AdminService adminService, TaskService taskService,
+                           com.ykt.platform.service.BackupService backupService) {
         this.adminService = adminService;
         this.taskService = taskService;
+        this.backupService = backupService;
+    }
+
+    /** 手动触发一次 H2 在线备份（每日 03:00 也会自动备份，保留 7 份）。 */
+    @PostMapping("/backup")
+    public java.util.Map<String, Object> backup() throws java.io.IOException {
+        return java.util.Map.of("ok", true, "path", backupService.backupNow());
     }
 
     @GetMapping("/overview")

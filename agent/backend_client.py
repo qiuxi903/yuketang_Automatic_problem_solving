@@ -6,6 +6,11 @@ import requests
 
 import config
 
+# 所有请求走同一会话并带上鉴权头（后端配置 ykt.agent-token 时必须匹配，否则 403）
+_session = requests.Session()
+if getattr(config, "AGENT_TOKEN", ""):
+    _session.headers["X-Agent-Token"] = config.AGENT_TOKEN
+
 # 多工人并行时，进度/答案回传可能同时发生：串行化写请求，配合后端锁等待消除偶发 500
 _write_lock = threading.Lock()
 
@@ -20,12 +25,12 @@ class BackendClient:
 
     def get_running_tasks(self):
         """后端当前 RUNNING 状态的任务清单（用于占用登记的过期自救）。"""
-        r = requests.get(self.base + "/api/agent/tasks/running", timeout=10)
+        r = _session.get(self.base + "/api/agent/tasks/running", timeout=10)
         r.raise_for_status()
         return r.json()
 
     def next_task(self):
-        r = requests.get(self.base + "/api/agent/tasks/next", timeout=10)
+        r = _session.get(self.base + "/api/agent/tasks/next", timeout=10)
         if r.status_code == 204:
             return None
         r.raise_for_status()
@@ -43,7 +48,7 @@ class BackendClient:
 
     def batch_decision(self, task_id):
         """轮询批次决策，返回 {status, batch}；batch 非空即可继续作答。"""
-        r = requests.get(f"{self.base}/api/agent/tasks/{task_id}/batch", timeout=10)
+        r = _session.get(f"{self.base}/api/agent/tasks/{task_id}/batch", timeout=10)
         r.raise_for_status()
         return r.json()
 
@@ -75,7 +80,7 @@ class BackendClient:
     def fallback_answers(self, batch, paper, questions):
         """本地答案库未命中的题目交给后端配置的兜底 API 作答。"""
         payload = {"batch": batch, "paper": paper, "questions": questions}
-        r = requests.post(self.base + "/api/answer/fallback", json=payload, timeout=60)
+        r = _session.post(self.base + "/api/answer/fallback", json=payload, timeout=60)
         r.raise_for_status()
         return r.json().get("answers", [])
 
@@ -84,7 +89,7 @@ class BackendClient:
 
     def _post(self, task_id, action, payload):
         url = f"{self.base}/api/agent/tasks/{task_id}/{action}"
-        r = requests.post(url, json=payload, timeout=15)
+        r = _session.post(url, json=payload, timeout=15)
         if r.status_code == 404:
             raise TaskGone(f"任务 #{task_id} 已不存在（可能被用户删除）")
         if r.status_code >= 500:

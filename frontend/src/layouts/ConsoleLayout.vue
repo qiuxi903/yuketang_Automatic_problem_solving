@@ -465,6 +465,9 @@ function handleLogout() {
 .shell-body > :deep(*) {
   flex: 1;
   min-height: 0;
+  /* flex 子项默认 min-width:auto 会被宽内容（el-table 等）撑破布局宽度，
+     导致手机端整页按内容宽排版、超出部分被裁——必须允许收缩 */
+  min-width: 0;
 }
 
 /* —— 移动端底部标签栏（桌面隐藏） —— */

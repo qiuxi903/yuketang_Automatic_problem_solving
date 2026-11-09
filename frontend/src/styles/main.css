@@ -557,6 +557,14 @@ html.dark {
   }
 }
 
+/* 移动端兜底：任何组件的最小宽度都不允许把页面撑出屏幕（组件内部自行横向滚动） */
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
+
 /* 移动浏览器动态视口：地址栏收展时高度跟随 */
 @supports (height: 100dvh) {
   html,
