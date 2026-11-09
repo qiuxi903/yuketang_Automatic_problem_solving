@@ -1,5 +1,4 @@
 import client from './client'
-import type { VipOrder } from './vip'
 import type { AdminOverview, AdminTaskView, AdminUserView, TaskSnapshot, UserRole } from '@/types'
 
 /** 管理员接口，后端 /api/admin/** 已限定 ADMIN 角色。 */
@@ -106,9 +105,4 @@ export function getUserLoginLogs(id: number) {
 /** 按用户过滤做题记录。 */
 export function getUserTasks(id: number) {
   return client.get<unknown, import('@/types').AdminTaskView[]>(`/admin/users/${id}/tasks`)
-}
-
-/** 用户充值/订单记录。 */
-export function getUserOrders(id: number) {
-  return client.get<unknown, VipOrder[]>(`/admin/vip/users/${id}/orders`)
 }

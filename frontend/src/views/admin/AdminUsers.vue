@@ -4,14 +4,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
 import {
   getUserLoginLogs,
-  getUserOrders,
   getUserTasks,
   listUsers,
   resetUserPassword,
   setUserDisabled,
   updateUserRole,
 } from '@/api/admin'
-import { exportOrdersCsv, type VipOrder } from '@/api/vip'
 import { formatDateTime } from '@/utils/format'
 import { useIsMobile } from '@/utils/useMedia'
 import StatusPill from '@/components/ui/StatusPill.vue'
@@ -127,14 +125,8 @@ const detailUser = ref<AdminUserView | null>(null)
 const detailTab = ref<'tasks' | 'orders' | 'logs'>('tasks')
 const detailLoading = ref(false)
 const detailTasks = ref<AdminTaskView[]>([])
-const detailOrders = ref<VipOrder[]>([])
+// 充值记录为 VIP 分支功能（main 无订单体系），此处仅提示
 const detailLogs = ref<import('@/api/admin').LoginLogView[]>([])
-
-const detailPaid = computed(() =>
-  detailOrders.value
-    .filter((o) => o.status === 'PAID')
-    .reduce((sum, o) => sum + o.payableFen, 0),
-)
 
 async function openDetail(row: AdminUserView) {
   detailUser.value = row
@@ -142,13 +134,11 @@ async function openDetail(row: AdminUserView) {
   detailTab.value = 'tasks'
   detailLoading.value = true
   try {
-    const [tasks, orders, logs] = await Promise.all([
+    const [tasks, logs] = await Promise.all([
       getUserTasks(row.id),
-      getUserOrders(row.id),
       getUserLoginLogs(row.id),
     ])
     detailTasks.value = tasks
-    detailOrders.value = orders
     detailLogs.value = logs
   } finally {
     detailLoading.value = false
@@ -319,7 +309,6 @@ onMounted(load)
       </template>
       <div v-loading="detailLoading">
         <div class="d-summary">
-          <span>充值合计 <b class="money">¥{{ (detailPaid / 100).toFixed(2) }}</b></span>
           <span>做题 <b>{{ detailTasks.length }}</b> 次</span>
           <span>上次登录 <b>{{ detailUser?.lastLoginIp || '—' }}（{{ detailUser?.lastLoginLocation || '未知' }}）</b></span>
         </div>
@@ -346,36 +335,8 @@ onMounted(load)
               </el-table-column>
             </el-table>
           </el-tab-pane>
-          <el-tab-pane label="充值 / 订单记录" name="orders">
-            <el-table :data="detailOrders" size="small" max-height="380">
-              <el-table-column prop="orderNo" label="订单号" min-width="150" show-overflow-tooltip />
-              <el-table-column label="商品" width="130">
-                <template #default="{ row }">
-                  {{ row.kind === 'DATE_PASS' ? `单日 · ${row.targetBatch}` : '月卡' }}
-                </template>
-              </el-table-column>
-              <el-table-column label="实付" width="100">
-                <template #default="{ row }">
-                  <span class="money">¥{{ (row.payableFen / 100).toFixed(2) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="状态" width="92">
-                <template #default="{ row }">
-                  <el-tag :type="row.status === 'PAID' ? 'success' : row.status === 'CREATED' ? 'warning' : 'info'" effect="light" size="small">
-                    {{ row.status === 'PAID' ? '已支付' : row.status === 'CREATED' ? '待支付' : row.status === 'EXPIRED' ? '已过期' : row.status === 'REJECTED' ? '已拒单' : '已取消' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column label="时间" min-width="150">
-                <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
-              </el-table-column>
-            </el-table>
-            <el-button
-              v-if="detailOrders.length"
-              size="small"
-              class="d-export"
-              @click="exportOrdersCsv(); ElMessage.success('全部订单流水已下载')"
-            >导出全部订单 CSV</el-button>
+<el-tab-pane label="充值记录" name="orders">
+            <el-empty description="充值/订单记录为 VIP 版功能（main 免费版无订单体系）" :image-size="60" />
           </el-tab-pane>
           <el-tab-pane label="登录记录" name="logs">
             <el-table :data="detailLogs" size="small" max-height="380">
