@@ -27,12 +27,15 @@ public class AdminController {
     private final AdminService adminService;
     private final TaskService taskService;
     private final com.ykt.platform.service.BackupService backupService;
+    private final com.ykt.platform.service.AdminAuditService auditService;
 
     public AdminController(AdminService adminService, TaskService taskService,
-                           com.ykt.platform.service.BackupService backupService) {
+                           com.ykt.platform.service.BackupService backupService,
+                           com.ykt.platform.service.AdminAuditService auditService) {
         this.adminService = adminService;
         this.taskService = taskService;
         this.backupService = backupService;
+        this.auditService = auditService;
     }
 
     /** 手动触发一次 H2 在线备份（每日 03:00 也会自动备份，保留 7 份）。 */
@@ -87,6 +90,13 @@ public class AdminController {
     }
 
     /** 用户登录记录（最近 50 条：IP/归属地/UA/结果）。 */
+    /** 管理操作审计（最近 limit 条，默认 100）。 */
+    @GetMapping("/audit-logs")
+    public List<com.ykt.platform.entity.AdminAuditLog> auditLogs(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "100") int limit) {
+        return auditService.recent(limit);
+    }
+
     @GetMapping("/users/{id}/login-logs")
     public List<LoginLog> loginLogs(@PathVariable Long id) {
         return adminService.loginLogs(id);
