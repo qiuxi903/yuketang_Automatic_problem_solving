@@ -22,8 +22,6 @@ const router = createRouter({
           meta: { title: '做题工作台' },
         },
         {
-        {
-          // 个人中心：头像/改名/改密/登录记录（挂 ConsoleLayout，手机端保留顶栏与 tabbar）
           path: 'profile',
           name: 'profile',
           component: () => import('@/views/Profile.vue'),
