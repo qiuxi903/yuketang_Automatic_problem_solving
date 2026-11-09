@@ -136,7 +136,7 @@ function handleLogout() {
           {{ consoleStore.connected ? '实时在线' : '等待连接' }}
         </StatusPill>
 
-        <el-dropdown trigger="click">
+        <el-dropdown trigger="click" class="mobile-hide">
           <span class="user-chip">
             <span class="avatar">
               <img v-if="auth.avatar" :src="auth.avatar" alt="头像" />
@@ -283,6 +283,16 @@ function handleLogout() {
           <span>设置</span>
         </button>
       </template>
+      <button
+        class="tabbar-item tabbar-me"
+        :class="{ 'is-active': route.path.startsWith('/profile') }"
+        type="button"
+        @click="go('profile')"
+      >
+        <img v-if="auth.avatar" :src="auth.avatar" alt="" class="tabbar-avatar" />
+        <el-icon v-else><User /></el-icon>
+        <span>我的</span>
+      </button>
     </nav>
   </div>
 </template>
@@ -584,6 +594,17 @@ function handleLogout() {
   }
   .tabbar-item.is-active .el-icon {
     color: var(--accent);
+  }
+  /* 6 项（含管理员）时收紧间距 */
+  .tabbar-item {
+    padding: 0 2px;
+  }
+  .tabbar-me .tabbar-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1.5px solid var(--accent);
   }
 }
 
