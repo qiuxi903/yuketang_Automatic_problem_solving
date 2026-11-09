@@ -256,6 +256,11 @@ onMounted(load)
           </el-button>
         </div>
       </div>
+
+      <!-- 手机端：退出登录放内容末尾（顶部红条太扎眼） -->
+      <div class="logout-mobile mobile-only">
+        <el-button type="danger" plain size="large" @click="logoutNow">退出登录</el-button>
+      </div>
     </div>
   </div>
 </template>
@@ -412,8 +417,36 @@ export default { name: 'ProfilePage' }
   .page-head {
     flex-direction: column;
     align-items: stretch;
+    text-align: center;
   }
-  .head-actions .el-button {
+  /* 顶部退出按钮手机端隐藏：已挪到内容底部，顶部不再扎眼 */
+  .head-actions {
+    display: none;
+  }
+  /* 头像身份卡居中排版，更大气 */
+  .id-row {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .avatar-wrap {
+    width: 88px;
+    height: 88px;
+  }
+  .id-name {
+    font-size: 20px;
+  }
+  .name-row {
+    flex-direction: column;
+  }
+  .name-row .el-button {
+    width: 100%;
+  }
+  /* 底部退出按钮全宽 */
+  .logout-mobile {
+    margin-top: 14px;
+  }
+  .logout-mobile .el-button {
     width: 100%;
   }
   .name-row {
