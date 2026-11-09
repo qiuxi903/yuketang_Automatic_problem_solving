@@ -11,7 +11,6 @@ import {
   type LoginLogView,
   type MeInfo,
 } from '@/api/auth'
-import { getVipStatus, type VipStatus } from '@/api/vip'
 import { formatDateTime } from '@/utils/format'
 import { useAuthStore } from '@/store/auth'
 import { useRouter } from 'vue-router'
@@ -21,7 +20,6 @@ const router = useRouter()
 
 const loading = ref(true)
 const me = ref<MeInfo | null>(null)
-const vip = ref<VipStatus | null>(null)
 const logs = ref<LoginLogView[]>([])
 
 /* —— 改用户名 —— */
@@ -34,9 +32,8 @@ const pwdSaving = ref(false)
 
 async function load() {
   try {
-    const [m, v, logsList] = await Promise.all([getMe(), getVipStatus(), getMyLoginLogs()])
+    const [m, logsList] = await Promise.all([getMe(), getMyLoginLogs()])
     me.value = m
-    vip.value = v
     logs.value = logsList
     nameForm.value.username = m.username
     auth.setAvatarUrl(m.avatar)
@@ -229,17 +226,9 @@ onMounted(load)
       </div>
     </div>
 
-    <!-- VIP 状态摘要 -->
-    <div v-if="vip" class="panel-card vip-strip">
+    <div class="panel-card vip-strip">
       <h4><el-icon><Coin /></el-icon> VIP 状态</h4>
-      <div class="vip-facts">
-        <span>月卡 <b>{{ vip.monthCardActive ? '生效中' : '未开通' }}</b></span>
-        <span>免费额度 <b>{{ vip.freeQuota }} 次</b></span>
-        <span>已解锁日期 <b>{{ vip.unlockedBatches.length }} 个</b></span>
-        <el-button size="small" type="primary" plain @click="router.push({ path: '/vip' })">
-          去 VIP 会员中心
-        </el-button>
-      </div>
+      <el-empty description="VIP 状态请到 VIP 会员中心查看（main 免费版无付费体系）" :image-size="60" />
     </div>
 
     <!-- 登录记录 -->
