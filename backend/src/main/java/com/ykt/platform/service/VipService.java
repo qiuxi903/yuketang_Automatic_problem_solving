@@ -3,6 +3,7 @@ package com.ykt.platform.service;
 import com.ykt.platform.config.VipProperties;
 import com.ykt.platform.dto.PayNotifyRequest;
 import com.ykt.platform.dto.VipClaimResultResponse;
+import com.ykt.platform.dto.VipMyStatsResponse;
 import com.ykt.platform.dto.PaperManifestResponse;
 import com.ykt.platform.dto.VipActivityView;
 import com.ykt.platform.dto.VipOrderCreateRequest;
@@ -645,6 +646,30 @@ public class VipService {
         e.setGrantedBy(grantedBy);
         entitlementRepository.save(e);
         return expiresAt;
+    }
+
+    // ---------- 用户侧统计 ----------
+
+    /** 我的 VIP 统计：累计消费、订单数、解锁日期数（用户侧展示）。 */
+    @Transactional(readOnly = true)
+    public VipMyStatsResponse myStats(Long userId) {
+        long spent = 0;
+        long paidOrders = 0;
+        for (VipOrder o : orderRepository.findByUserIdOrderByCreatedAtDesc(userId)) {
+            if (VipOrder.STATUS_PAID.equals(o.getStatus())) {
+                spent += o.getPayableFen();
+                paidOrders++;
+            }
+        }
+        VipAccount acc = account(userId);
+        Instant now = Instant.now();
+        Instant monthExpires = monthCardExpiresAt(userId);
+        String monthState = monthExpires != null && monthExpires.isAfter(now)
+                ? "剩 " + Math.max(0, (int) java.time.Duration.between(now, monthExpires).toDays()) + " 天"
+                : "未开通";
+        return new VipMyStatsResponse(
+                spent, paidOrders, unlockedBatches(userId).size(),
+                acc.getFreeQuota(), monthState);
     }
 
     // ---------- 定时维护 ----------

@@ -4,6 +4,7 @@ import com.ykt.platform.dto.VipOrderCreateRequest;
 import com.ykt.platform.dto.VipOrderView;
 import com.ykt.platform.dto.VipProductsResponse;
 import com.ykt.platform.dto.VipClaimResultResponse;
+import com.ykt.platform.dto.VipMyStatsResponse;
 import com.ykt.platform.dto.VipQuotaUnlockRequest;
 import com.ykt.platform.dto.VipRedeemRequest;
 import com.ykt.platform.dto.VipStatusResponse;
@@ -40,6 +41,12 @@ public class VipController {
     @GetMapping("/products")
     public VipProductsResponse products() {
         return vipService.products(SecurityUtil.currentUserId());
+    }
+
+    /** 我的 VIP 统计：累计消费、订单数、解锁日期数、额度、月卡状态。 */
+    @GetMapping("/my-stats")
+    public VipMyStatsResponse myStats() {
+        return vipService.myStats(SecurityUtil.currentUserId());
     }
 
     /** 收款码图片（base64 dataURL）：{wechat: ..., alipay: ...}，未上传的为 null。 */

@@ -17,6 +17,9 @@ import java.util.List;
  * @param freeQuotaTotal     用户剩余免费额度总量
  * @param couponsActive      可用优惠码数（未禁用未用尽未过期）
  * @param couponsUsed        优惠码累计核销次数
+ * @param paidUsers          付费用户数（有已支付订单的去重人数）
+ * @param totalUsers         平台注册用户总数（算转化率用）
+ * @param channelOrders      各收款渠道的已支付订单数（LISTEN/MANUAL/XUNHU）
  */
 public record VipStatsResponse(
         long totalRevenueFen,
@@ -30,7 +33,10 @@ public record VipStatsResponse(
         long dateEntitlements,
         long freeQuotaTotal,
         long couponsActive,
-        long couponsUsed) {
+        long couponsUsed,
+        long paidUsers,
+        long totalUsers,
+        java.util.Map<String, Long> channelOrders) {
 
     /** 单日收入行。 */
     public record DailyRevenue(String date, long revenueFen, long orders) {

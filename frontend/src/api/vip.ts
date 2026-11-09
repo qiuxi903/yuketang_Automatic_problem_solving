@@ -167,6 +167,22 @@ export interface VipStats {
   freeQuotaTotal: number
   couponsActive: number
   couponsUsed: number
+  /** 付费用户数（有已支付订单的去重人数） */
+  paidUsers: number
+  /** 平台注册用户总数 */
+  totalUsers: number
+  /** 各收款渠道已支付订单数 */
+  channelOrders: Record<string, number>
+}
+
+export interface VipMyStats {
+  /** 累计消费（分） */
+  totalSpentFen: number
+  paidOrders: number
+  unlockedCount: number
+  freeQuota: number
+  /** 月卡状态文案（如「剩 12 天」/「未开通」） */
+  monthCardState: string
 }
 
 /* —— 用户侧 —— */
@@ -372,4 +388,9 @@ export function expireStaleOrders() {
 /** 手动触发一次 H2 在线备份。 */
 export function triggerBackup() {
   return client.post<unknown, { ok: boolean; path: string }>('/admin/vip/backup')
+}
+
+/** 我的 VIP 统计：累计消费、订单数、解锁日期数。 */
+export function getMyVipStats() {
+  return client.get<unknown, VipMyStats>('/vip/my-stats')
 }

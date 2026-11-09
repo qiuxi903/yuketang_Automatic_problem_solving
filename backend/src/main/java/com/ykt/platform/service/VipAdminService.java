@@ -605,11 +605,25 @@ public class VipAdminService {
                 .mapToLong(VipCoupon::usedCountOrDefault)
                 .sum();
 
+        // 渠道分布 + 付费用户（转化率口径）
+        java.util.Map<String, Long> channelOrders = new java.util.LinkedHashMap<>();
+        java.util.Set<Long> paidUserIds = new java.util.HashSet<>();
+        for (VipOrder o : orders) {
+            if (!VipOrder.STATUS_PAID.equals(o.getStatus())) {
+                continue;
+            }
+            channelOrders.merge(o.getPayChannel() == null ? "UNKNOWN" : o.getPayChannel(), 1L, Long::sum);
+            paidUserIds.add(o.getUserId());
+        }
+        long paidUsers = paidUserIds.size();
+        long totalUsers = userRepository.count();
+
         return new com.ykt.platform.dto.VipStatsResponse(
                 totalRevenue, todayRevenue, daily,
                 paid, pending, cancelled, rejected,
                 monthActiveUsers, dateEntitlements, freeQuotaTotal,
-                couponsActive, couponsUsed);
+                couponsActive, couponsUsed,
+                paidUsers, totalUsers, channelOrders);
     }
 
     // ---------- 私有工具 ----------

@@ -7,6 +7,7 @@ import {
   cancelVipOrder,
   claimVipOrderPaid,
   createVipOrder,
+  getMyVipStats,
   getPayQrImages,
   getVipProducts,
   getVipStatus,
@@ -17,6 +18,7 @@ import {
   type VipOrderStatus,
   type VipProducts,
   type VipStatus,
+  type VipMyStats,
 } from '@/api/vip'
 import { countdown, formatDateTime } from '@/utils/format'
 
@@ -46,6 +48,11 @@ let pollTimer: number | null = null
 let tickTimer: number | null = null
 const nowTick = ref(Date.now())
 const payResult = ref<'success' | null>(null)
+
+const myStats = ref<VipMyStats | null>(null)
+// 演示视频：构建时放在 public/media/ 下（不经 rollup 处理）
+const demoVideoSrc = '/media/vip-demo.mp4'
+const showGuide = ref(true)
 
 const fen2yuan = (fen: number) => (fen / 100).toFixed(2)
 
@@ -129,16 +136,18 @@ watch(payCountdown, (c) => {
 
 async function refresh() {
   try {
-    const [s, p, o, qr] = await Promise.all([
+    const [s, p, o, qr, ms] = await Promise.all([
       getVipStatus(),
       getVipProducts(),
       listMyVipOrders(),
       getPayQrImages(),
+      getMyVipStats(),
     ])
     status.value = s
     products.value = p
     orders.value = o
     qrImages.value = qr
+    myStats.value = ms
     // 从做题台 402 跳转过来时预选要解锁的日期
     const fromBatch = String(route.query.batch ?? '').trim()
     if (fromBatch && !pickBatch.value) {
@@ -390,6 +399,25 @@ onBeforeUnmount(stopPolling)
         </div>
       </div>
 
+      <!-- 新手三步引导（可收起） -->
+      <div v-if="showGuide" class="guide-strip">
+        <div class="guide-step">
+          <span class="g-num">1</span>
+          <span class="g-text">选日期或开通月卡</span>
+        </div>
+        <span class="g-arrow">→</span>
+        <div class="guide-step">
+          <span class="g-num">2</span>
+          <span class="g-text">扫码支付<b>精确金额</b>（含随机尾数）</span>
+        </div>
+        <span class="g-arrow">→</span>
+        <div class="guide-step">
+          <span class="g-num">3</span>
+          <span class="g-text">点「我已支付，核实到账」，<b>秒开通</b></span>
+        </div>
+        <button class="g-close" type="button" @click="showGuide = false">知道了</button>
+      </div>
+
       <!-- 月卡临期续费提示 -->
       <el-alert
         v-if="status?.monthCardActive && monthDaysLeft !== null && monthDaysLeft <= 7"
@@ -539,6 +567,49 @@ onBeforeUnmount(stopPolling)
             </el-button>
           </div>
         </div>
+      </div>
+
+      <!-- 我的 VIP 统计 + 视频教程 + 温馨提示 -->
+      <div class="panels me-row">
+        <div class="panel-card">
+          <h4><el-icon><Coin /></el-icon> 我的 VIP 统计</h4>
+          <div v-if="myStats" class="me-grid">
+            <div class="me-cell">
+              <span class="me-label">累计消费</span>
+              <strong class="money">¥{{ fen2yuan(myStats.totalSpentFen) }}</strong>
+            </div>
+            <div class="me-cell">
+              <span class="me-label">已支付订单</span>
+              <strong>{{ myStats.paidOrders }} 笔</strong>
+            </div>
+            <div class="me-cell">
+              <span class="me-label">已解锁日期</span>
+              <strong>{{ myStats.unlockedCount }} 个</strong>
+            </div>
+            <div class="me-cell">
+              <span class="me-label">免费额度</span>
+              <strong>{{ myStats.freeQuota }} 次</strong>
+            </div>
+            <div class="me-cell">
+              <span class="me-label">月卡</span>
+              <strong>{{ myStats.monthCardState }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel-card">
+          <h4><el-icon><CreditCard /></el-icon> 如何开通（演示视频）</h4>
+          <video class="demo-video" controls preload="metadata" :src="demoVideoSrc">
+            你的浏览器不支持视频播放，请参考下方文字提示。
+          </video>
+        </div>
+      </div>
+
+      <div class="tips-strip">
+        <span class="tip-item">💡 支付金额含随机尾数，用于自动对单，请<b>精确输入</b></span>
+        <span class="tip-item">⏱️ 订单 10 分钟内有效，超时取消后重新下单即可</span>
+        <span class="tip-item">🛡️ 重复支付有保护：金额对不上不会误开通，可放心操作</span>
+        <span class="tip-item">🎯 取答案与答案下载永远免费，付费仅用于自动做题</span>
       </div>
 
       <!-- 订单记录 -->
@@ -910,6 +981,109 @@ export default { name: 'VipPage' }
   margin-left: 0;
 }
 
+/* —— 三步引导条 —— */
+.guide-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.guide-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.g-num {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+.g-text {
+  font-size: 13px;
+  color: var(--ink-600);
+}
+.g-text b {
+  color: var(--ink-900);
+}
+.g-arrow {
+  color: var(--ink-300);
+}
+.g-close {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--ink-400);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.g-close:hover {
+  color: var(--ink-700);
+}
+
+.me-row {
+  margin-top: 18px;
+}
+.me-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+.me-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.me-label {
+  font-size: 12px;
+  color: var(--ink-400);
+}
+.me-cell strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--ink-900);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.demo-video {
+  width: 100%;
+  max-height: 300px;
+  border-radius: var(--r-md);
+  background: var(--ink-950, #111);
+}
+
+.tips-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin-top: 18px;
+  padding: 14px 18px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border);
+  border-radius: var(--r-lg);
+}
+.tip-item {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-500);
+}
+.tip-item b {
+  color: var(--ink-800);
+}
+
 /* —— 优惠码 / 兑换（panel-card 与管理后台同款） —— */
 .panels {
   display: grid;
@@ -1168,6 +1342,15 @@ export default { name: 'VipPage' }
   .pricing,
   .panels {
     grid-template-columns: 1fr;
+  }
+  .me-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tips-strip {
+    grid-template-columns: 1fr;
+  }
+  .guide-strip {
+    font-size: 12.5px;
   }
   .coupon-row {
     flex-wrap: wrap;

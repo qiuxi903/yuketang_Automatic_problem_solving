@@ -67,6 +67,19 @@ const notifications = ref<PayNotificationView[]>([])
 
 const fen2yuanStats = (fen: number) => (fen / 100).toFixed(2)
 
+const conversionPercent = computed(() => {
+  if (!stats.value || !stats.value.totalUsers) return 0
+  return Math.round((stats.value.paidUsers / stats.value.totalUsers) * 100)
+})
+
+const channelText = computed(() => {
+  const co = stats.value?.channelOrders ?? {}
+  const map: Record<string, string> = { LISTEN: '监听', MANUAL: '人工', XUNHU: '虎皮椒' }
+  const keys = Object.keys(co)
+  if (!keys.length) return '—'
+  return keys.map((k) => `${map[k] ?? k} ${co[k]}`).join(' / ')
+})
+
 /** 近 7 日柱图高度百分比（最大值满高，全 0 时给出 4% 的底柱） */
 const dailyBars = computed(() => {
   const daily = stats.value?.dailyRevenue ?? []
@@ -618,6 +631,21 @@ onMounted(() => void loadTab(activeTab.value))
             <span class="vs-label">订单</span>
             <strong>已付 {{ stats.paidOrders }}</strong>
             <em>待支付 <b :class="{ 'vs-warn': stats.pendingOrders > 0 }">{{ stats.pendingOrders }}</b> · 拒单 {{ stats.rejectedOrders }}</em>
+          </div>
+          <div class="vs-cell">
+            <span class="vs-label">
+              付费用户
+              <el-tooltip content="有已支付订单的去重用户数；转化率 = 付费用户 ÷ 注册用户" placement="top">
+                <span class="vs-q">?</span>
+              </el-tooltip>
+            </span>
+            <strong>{{ stats.paidUsers }} 人</strong>
+            <em>转化率 {{ conversionPercent }}% · 注册 {{ stats.totalUsers }} 人</em>
+          </div>
+          <div class="vs-cell">
+            <span class="vs-label">渠道分布</span>
+            <strong class="vs-channel">{{ channelText }}</strong>
+            <em>已支付订单按渠道</em>
           </div>
           <div class="vs-cell">
             <span class="vs-label">月卡在期</span>
@@ -1418,7 +1446,7 @@ onMounted(() => void loadTab(activeTab.value))
 .vip-stats {
   display: grid;
   /* 自适应列数：宽屏 6 列，窄屏自动换行，柱图列固定独占一行 */
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 14px;
   padding: 14px 16px;
@@ -1438,6 +1466,20 @@ onMounted(() => void loadTab(activeTab.value))
 .vs-label {
   font-size: 12px;
   color: var(--ink-500);
+}
+.vs-q {
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--ink-400);
+  font-size: 10px;
+  cursor: help;
+}
+.vs-channel {
+  font-size: 15px !important;
 }
 .vs-cell strong {
   font-size: 19px;
