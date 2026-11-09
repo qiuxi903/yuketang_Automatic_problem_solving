@@ -6,9 +6,7 @@ import {
   changePassword,
   changeUsername,
   getMe,
-  getMyLoginLogs,
   setAvatar,
-  type LoginLogView,
   type MeInfo,
 } from '@/api/auth'
 import { getVipStatus, type VipStatus } from '@/api/vip'
@@ -22,7 +20,6 @@ const router = useRouter()
 const loading = ref(true)
 const me = ref<MeInfo | null>(null)
 const vip = ref<VipStatus | null>(null)
-const logs = ref<LoginLogView[]>([])
 
 /* —— 改用户名 —— */
 const nameForm = ref({ username: '' })
@@ -34,10 +31,9 @@ const pwdSaving = ref(false)
 
 async function load() {
   try {
-    const [m, v, logsList] = await Promise.all([getMe(), getVipStatus(), getMyLoginLogs()])
+    const [m, v] = await Promise.all([getMe(), getVipStatus()])
     me.value = m
     vip.value = v
-    logs.value = logsList
     nameForm.value.username = m.username
     auth.setAvatarUrl(m.avatar)
   } finally {
@@ -242,26 +238,6 @@ onMounted(load)
       </div>
     </div>
 
-    <!-- 登录记录 -->
-    <div class="panel-card">
-      <h4><el-icon><Picture /></el-icon> 我的登录记录（最近 50 条）</h4>
-      <el-table :data="logs" size="small" max-height="320">
-        <el-table-column label="时间" width="160">
-          <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
-        </el-table-column>
-        <el-table-column prop="ip" label="IP" width="140" />
-        <el-table-column prop="location" label="归属地" min-width="160" />
-        <el-table-column label="结果" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.success ? 'success' : 'danger'" effect="light" size="small">
-              {{ row.success ? '成功' : '失败' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="message" label="备注" min-width="120" show-overflow-tooltip />
-        <el-table-column prop="userAgent" label="设备" min-width="180" show-overflow-tooltip />
-      </el-table>
-    </div>
   </div>
 </template>
 
