@@ -184,6 +184,12 @@ public class AdminVipController {
                 .body(body);
     }
 
+    /** 某用户的充值/订单记录（用户详情页「查看充值」）。 */
+    @GetMapping("/users/{userId}/orders")
+    public java.util.List<com.ykt.platform.dto.VipOrderView> userOrders(@PathVariable Long userId) {
+        return adminService.userOrders(userId);
+    }
+
     // ---------- 单日按批次定价 ----------
 
     @GetMapping("/batch-prices")

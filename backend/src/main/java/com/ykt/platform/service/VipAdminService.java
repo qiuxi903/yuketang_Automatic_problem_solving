@@ -111,6 +111,15 @@ public class VipAdminService {
                 .toList();
     }
 
+    /** 某用户的订单记录（用户详情页「查看充值」）。 */
+    @Transactional(readOnly = true)
+    public List<VipOrderView> userOrders(Long userId) {
+        Map<Long, String> usernames = usernameMap();
+        return orderRepository.findByUserIdOrderByCreatedAtDesc(userId).stream()
+                .map(o -> toOrderView(o, usernames))
+                .toList();
+    }
+
     /** 管理员确认到账：核销订单并发权益。 */
     @Transactional
     public VipOrderView confirmOrder(String orderNo, String adminRemark, Long adminId) {
