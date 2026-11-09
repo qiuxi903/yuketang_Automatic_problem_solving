@@ -43,6 +43,12 @@
 - **对账导出**：管理端订单页「导出订单 CSV / 导出收款 CSV」（带 BOM，Excel 直开）
 - **月卡到期提醒**：做题台顶栏在期剩 ≤7 天时亮琥珀徽章，付费页顶部续费提示
 
+### 统计补全与引导（用户侧 + 管理侧）
+- `GET /api/vip/my-stats`：累计消费/已支付订单/解锁日期数/额度/月卡状态（付费页「我的 VIP 统计」面板）
+- 运营统计新口径：paidUsers（去重付费用户）、totalUsers、channelOrders（各渠道已支付订单分布）——AdminVip 统计条新「付费用户/转化率」「渠道分布」格
+- 付费页新增：三步引导条（可收起）、「如何开通」演示视频（public/media/vip-demo.mp4，25s H.264 288KB，真实流程录制）、温馨提示条（尾数/时限/重复支付保护/免费边界）
+- 冒烟 28/28（默认配置）；Agent 鉴权用例为条件断言（带 YKT_AGENT_TOKEN 启动时验 403/放行）
+
 ### 按日期定价
 - 新表 `vip_batch_price`（batch 唯一, priceFen）：管理员单独定价某日期，未覆盖的日期用 `VipSettings.datePassPriceFen`（默认 3 元）
 - 月卡默认价已改 15 元（VipSettings 默认 1500 分；存量库由 VipBootstrap 从旧默认 2900 一次性迁移，不覆盖管理员改过的价）
