@@ -14,6 +14,9 @@ import {
   VideoPlay,
 } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
+import { useAuthStore } from '@/store/auth'
+
+const auth = useAuthStore()
 import { countdown, formatClock } from '@/utils/format'
 import { MODE_HINT, MODE_LABEL, sessionMeta, taskMeta } from '@/utils/status'
 import StatusPill from '@/components/ui/StatusPill.vue'
@@ -351,6 +354,7 @@ defineExpose({
             {{ store.selectedPapers.length ? `做勾选的 ${store.selectedPapers.length} 卷` : '做全部作业' }}
           </el-button>
           <el-button
+            v-if="auth.isAdmin"
             class="full"
             :icon="Collection"
             :disabled="!store.selectedPapers.length"

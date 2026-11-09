@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/store/auth'
+
+const auth = useAuthStore()
 import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, Medal, Download } from '@element-plus/icons-vue'
@@ -16,7 +19,7 @@ import { formatDateTime } from '@/utils/format'
 
 /**
  * 答案中心：平台全部答案的唯一入口。
- * - 全部试卷（默认）：列出答案库所有卷子，点开直接看答案、一键导出
+ * - 全部试卷（默认）：列出答案库所有卷子，点开直接看答案、一键导出（管理员）
  * - 搜答案：按题干/答案关键词搜全库
  * - 获取记录：任务获取到的答案自动记录（新采集 / 复用都算）
  */
@@ -231,6 +234,7 @@ watch(tab, (t) => {
                   <span class="date-text">{{ group.date }}</span>
                   <span class="sub mono-sm">{{ group.papers.length }} 份 · {{ group.questions }} 题</span>
                   <button
+                    v-if="auth.isAdmin"
                     class="date-export"
                     type="button"
                     title="导出该日期全部答案"
@@ -266,6 +270,7 @@ watch(tab, (t) => {
                     <span class="sub">{{ activePaper.batch }} · {{ activePaper.questions }} 题</span>
                   </div>
                   <el-button
+                    v-if="auth.isAdmin"
                     type="primary"
                     size="small"
                     :icon="Download"

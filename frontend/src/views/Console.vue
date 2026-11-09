@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/store/auth'
+
+const auth = useAuthStore()
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -163,6 +166,7 @@ onMounted(async () => {
           {{ store.selectedPapers.length ? '开始做题' : '做全部作业' }}
         </el-button>
         <el-button
+          v-if="auth.isAdmin"
           :disabled="!store.selectedPapers.length"
           :loading="store.starting"
           @click="startChecked('collect')"
