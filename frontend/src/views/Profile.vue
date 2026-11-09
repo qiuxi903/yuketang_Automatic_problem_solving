@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Coin, Key, Picture, User } from '@element-plus/icons-vue'
+import { Key, User } from '@element-plus/icons-vue'
 import {
   changePassword,
   changeUsername,
   getMe,
   setAvatar,
-  type LoginLogView,
   type MeInfo,
 } from '@/api/auth'
 import { formatDateTime } from '@/utils/format'
@@ -19,7 +18,6 @@ const router = useRouter()
 
 const loading = ref(true)
 const me = ref<MeInfo | null>(null)
-const logs = ref<LoginLogView[]>([])
 
 /* —— 改用户名 —— */
 const nameForm = ref({ username: '' })
@@ -31,13 +29,28 @@ const pwdSaving = ref(false)
 
 async function load() {
   try {
-    const [m] = await Promise.all([getMe()])
+    const m = await getMe()
     me.value = m
     nameForm.value.username = m.username
     auth.setAvatarUrl(m.avatar)
   } finally {
     loading.value = false
   }
+}
+
+/* —— 退出登录 —— */
+async function logoutNow() {
+  try {
+    await ElMessageBox.confirm('确定退出当前账号吗？', '退出登录', {
+      confirmButtonText: '退出',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  auth.logout()
+  router.push({ name: 'login' })
 }
 
 /* —— 头像上传：本地压缩到 256×256 再上传 —— */
@@ -159,76 +172,75 @@ onMounted(load)
 
 <template>
   <div v-loading="loading" class="profile">
-    <header class="page-head">
-      <div>
-        <span class="eyebrow">个人中心</span>
-        <h2>我的账号</h2>
-        <p class="page-sub">头像、用户名、密码与登录记录，都在这里管理。</p>
-      </div>
-    </header>
-
-    <div class="grid">
-      <!-- 头像与身份 -->
-      <div class="panel-card">
-        <h4><el-icon><User /></el-icon> 头像与身份</h4>
-        <div class="id-row">
-          <div class="avatar-wrap" @click="pickAvatar">
-            <img v-if="me?.avatar" :src="me.avatar" alt="头像" />
-            <span v-else class="avatar-fallback">{{ (me?.username || '?').slice(0, 1) }}</span>
-            <span class="avatar-edit">更换</span>
-          </div>
-          <input ref="avatarInput" type="file" accept="image/*" hidden @change="onAvatarFile" />
-          <div class="id-info">
-            <div class="id-name">{{ me?.username || '—' }}</div>
-            <div class="id-sub">
-              ID {{ me?.id || '—' }} · {{ me?.role === 'ADMIN' ? '管理员' : '普通用户' }} ·
-              注册于 {{ formatDateTime(me?.createdAt) }}
-            </div>
-          </div>
+    <div class="page-inner">
+      <header class="page-head">
+        <div>
+          <span class="eyebrow">个人中心</span>
+          <h2>我的账号</h2>
+          <p class="page-sub">头像、用户名、密码，都在这里管理。</p>
         </div>
-        <p class="hint">点击头像更换（自动裁成正方形）。头像仅自己与后台可见。</p>
+        <div class="head-actions">
+          <el-button type="danger" plain @click="logoutNow">退出登录</el-button>
+        </div>
+      </header>
 
-        <el-form label-position="top" @submit.prevent="saveUsername">
-          <el-form-item label="用户名（登录名，改后用新名字登录）">
-            <div class="name-row">
-              <el-input v-model="nameForm.username" maxlength="20" show-word-limit />
-              <el-button
-                type="primary"
-                :loading="nameSaving"
-                :disabled="!nameForm.username || nameForm.username === me?.username"
-                @click="saveUsername"
-              >
-                改名
-              </el-button>
+      <div class="grid">
+        <!-- 头像与身份 -->
+        <div class="panel-card">
+          <h4><el-icon><User /></el-icon> 头像与身份</h4>
+          <div class="id-row">
+            <div class="avatar-wrap" @click="pickAvatar">
+              <img v-if="me?.avatar" :src="me.avatar" alt="头像" />
+              <span v-else class="avatar-fallback">{{ (me?.username || '?').slice(0, 1) }}</span>
+              <span class="avatar-edit">更换</span>
             </div>
-          </el-form-item>
-        </el-form>
-      </div>
+            <input ref="avatarInput" type="file" accept="image/*" hidden @change="onAvatarFile" />
+            <div class="id-info">
+              <div class="id-name">{{ me?.username || '—' }}</div>
+              <div class="id-sub">
+                ID {{ me?.id || '—' }} · {{ me?.role === 'ADMIN' ? '管理员' : '普通用户' }} ·
+                注册于 {{ formatDateTime(me?.createdAt) }}
+              </div>
+            </div>
+          </div>
+          <p class="hint">点击头像更换（自动裁成正方形）。头像仅自己与后台可见。</p>
 
-      <!-- 修改密码 -->
-      <div class="panel-card">
-        <h4><el-icon><Key /></el-icon> 修改密码</h4>
-        <el-form label-position="top" @submit.prevent="savePassword">
-          <el-form-item label="旧密码">
-            <el-input v-model="pwdForm.oldPassword" type="password" show-password />
-          </el-form-item>
-          <el-form-item label="新密码（至少 8 位，含字母和数字）">
-            <el-input v-model="pwdForm.newPassword" type="password" show-password />
-          </el-form-item>
-          <el-form-item label="确认新密码">
-            <el-input v-model="pwdForm.confirm" type="password" show-password />
-          </el-form-item>
-          <el-button type="primary" :loading="pwdSaving" @click="savePassword">修改密码</el-button>
-          <p class="hint">修改成功后其它设备的登录态会立即失效。</p>
-        </el-form>
+          <el-form label-position="top" @submit.prevent="saveUsername">
+            <el-form-item label="用户名（登录名，改后用新名字登录）">
+              <div class="name-row">
+                <el-input v-model="nameForm.username" maxlength="20" show-word-limit />
+                <el-button
+                  type="primary"
+                  :loading="nameSaving"
+                  :disabled="!nameForm.username || nameForm.username === me?.username"
+                  @click="saveUsername"
+                >
+                  改名
+                </el-button>
+              </div>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 修改密码 -->
+        <div class="panel-card">
+          <h4><el-icon><Key /></el-icon> 修改密码</h4>
+          <el-form label-position="top" @submit.prevent="savePassword">
+            <el-form-item label="旧密码">
+              <el-input v-model="pwdForm.oldPassword" type="password" show-password />
+            </el-form-item>
+            <el-form-item label="新密码（至少 8 位，含字母和数字）">
+              <el-input v-model="pwdForm.newPassword" type="password" show-password />
+            </el-form-item>
+            <el-form-item label="确认新密码">
+              <el-input v-model="pwdForm.confirm" type="password" show-password />
+            </el-form-item>
+            <el-button type="primary" :loading="pwdSaving" @click="savePassword">修改密码</el-button>
+            <p class="hint">修改成功后其它设备的登录态会立即失效。</p>
+          </el-form>
+        </div>
       </div>
     </div>
-
-    <div class="panel-card vip-strip">
-      <h4><el-icon><Coin /></el-icon> VIP 状态</h4>
-      <el-empty description="VIP 状态请到 VIP 会员中心查看（main 免费版无付费体系）" :image-size="60" />
-    </div>
-
   </div>
 </template>
 
@@ -243,6 +255,21 @@ export default { name: 'ProfilePage' }
   background: var(--paper);
   padding: 20px 24px 48px;
 }
+/* 居中版心：与全站 page-inner 一致，宽视口不再整条铺满靠左 */
+.page-inner {
+  max-width: 860px;
+  margin: 0 auto;
+}
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.page-head .eyebrow {
+  color: var(--amber);
+}
 .page-head h2 {
   font-size: 21px;
   margin: 4px 0 6px;
@@ -251,6 +278,12 @@ export default { name: 'ProfilePage' }
   margin: 0;
   font-size: 12.5px;
   color: var(--ink-400);
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
 }
 
 .grid {
@@ -263,11 +296,6 @@ export default { name: 'ProfilePage' }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
-  margin-bottom: 0;
-}
-.profile > .panel-card,
-.profile > .grid {
-  margin-bottom: 18px;
 }
 .panel-card h4 {
   display: flex;
@@ -343,18 +371,6 @@ export default { name: 'ProfilePage' }
   gap: 10px;
 }
 
-.vip-strip .vip-facts {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-  font-size: 13px;
-  color: var(--ink-600);
-}
-.vip-strip b {
-  color: var(--ink-900);
-}
-
 @media (max-width: 768px) {
   .profile {
     padding: 16px 14px 34px;
@@ -362,9 +378,12 @@ export default { name: 'ProfilePage' }
   .grid {
     grid-template-columns: 1fr;
   }
-  .me-grid,
-  .vip-facts {
-    gap: 10px;
+  .page-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .head-actions .el-button {
+    width: 100%;
   }
   .name-row {
     flex-direction: column;
