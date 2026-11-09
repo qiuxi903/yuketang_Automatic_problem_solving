@@ -93,7 +93,7 @@ public class IpRegionService {
 
     /** 内网/回环地址不做归属地查询。 */
     private static boolean isPrivateOrLoopback(String ip) {
-        return ip.equals("127.0.0.1") || ip.equals("::1") || ip.startsWith("192.168.")
+        return ip.equals("::1") || ip.equals("0:0:0:0:0:0:0:1") || ip.equals("127.0.0.1") || ip.startsWith("192.168.")
                 || ip.startsWith("10.") || ip.startsWith("172.16.") || ip.startsWith("172.17.")
                 || ip.startsWith("172.18.") || ip.startsWith("172.19.") || ip.startsWith("172.20.")
                 || ip.startsWith("172.21.") || ip.startsWith("172.22.") || ip.startsWith("172.23.")
