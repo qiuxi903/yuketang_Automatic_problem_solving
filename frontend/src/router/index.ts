@@ -22,8 +22,7 @@ const router = createRouter({
           meta: { title: '做题工作台' },
         },
         {
-<<<<<<< HEAD
-=======
+        {
           // 个人中心：头像/改名/改密/登录记录（挂 ConsoleLayout，手机端保留顶栏与 tabbar）
           path: 'profile',
           name: 'profile',
@@ -31,14 +30,6 @@ const router = createRouter({
           meta: { title: '个人中心' },
         },
         {
-          // VIP 页挂在 ConsoleLayout 下：手机端保留顶栏与底部 tabbar，不做成全屏独立页
-          path: 'vip',
-          name: 'vip',
-          component: () => import('@/views/VipPage.vue'),
-          meta: { title: 'VIP 会员中心' },
-        },
-        {
->>>>>>> c823f8e (feat(vip): 账号中心——头像/改名/自己改密/登录记录 + 管理员改用户名)
           path: 'community',
           name: 'community',
           component: () => import('@/views/Community.vue'),
