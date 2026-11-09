@@ -35,6 +35,14 @@
 - worker.py：读不到账号名不再「12s 放行」（fail-closed），等待到超时明确报错
 - 管理后台可解绑；`ykt.vip.bind-required=false` 关闭
 
+### 安全与运维四件套（已全部落地并验证）
+- **限流**：`RateLimitFilter`（IP 滑动窗口，写方法生效）——登录/注册 20 次/分、下单 20/分、兑换 10/分、建任务 30/分，超限 429；凑单类脚本会被拦（冒烟已实证）
+- **Agent 接口鉴权**：`AgentTokenFilter` 守 `/api/agent/**` 与 `/api/answer/**`；backend 与 agent 两侧设置同一个 `YKT_AGENT_TOKEN` 环境变量即启用（backend 也可在 local.yml 写 `ykt.agent-token: xxx`），**留空 = 不鉴权（当前本地默认）**
+- **H2 在线备份**：`BackupService` 每日 03:00 用 H2 `BACKUP TO` 备到 `backend/backup/`（保留 7 份）；管理端可手动触发（POST /api/admin/vip/backup）
+- **订单过期清理**：定时任务每 10 分钟把超时未付 CREATED 单标 EXPIRED；管理端订单页有「清理过期单」按钮（可传 before 截止参数）
+- **对账导出**：管理端订单页「导出订单 CSV / 导出收款 CSV」（带 BOM，Excel 直开）
+- **月卡到期提醒**：做题台顶栏在期剩 ≤7 天时亮琥珀徽章，付费页顶部续费提示
+
 ### 按日期定价
 - 新表 `vip_batch_price`（batch 唯一, priceFen）：管理员单独定价某日期，未覆盖的日期用 `VipSettings.datePassPriceFen`（默认 3 元）
 - 月卡默认价已改 15 元（VipSettings 默认 1500 分；存量库由 VipBootstrap 从旧默认 2900 一次性迁移，不覆盖管理员改过的价）
@@ -68,7 +76,7 @@
 ## 三、已验证 / 未验证（诚实清单）
 
 - ✅ `mvn clean package`（Java 21）通过；`npm run build`（vue-tsc）通过；agent py 编译通过
-- ✅ 端到端冒烟 **24/24**（含月卡默认 1500 断言、批次价覆盖/下单/恢复默认）（含 collect 免费、统计口径、概览摘要、申报未核实拒绝、到账入池申报自动开通）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
+- ✅ 端到端冒烟 **29/29**（新增：订单 CSV 导出、过期清理、H2 备份落盘、Agent 接口无令牌 403/带令牌放行、限流实证）（含 collect 免费、统计口径、概览摘要、申报未核实拒绝、到账入池申报自动开通）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
 - ✅ 浏览器视觉验证：/vip 亮色/暗色/移动端(375px) + 支付弹层移动端 + /admin/vip 移动端卡片视图，UI 与设计系统 v2 统一（var() 令牌）
 - ❌ NOT RUN：虎皮椒渠道联调（无凭据）；pay-listener 对真实微信收款的校准（`--probe-uia` 待用户跑）；
   雨课堂真实扫码的绑定全链路（需真人扫码终验）；暗色/移动端只过了代码层（var() 令牌+断点），未截图细验

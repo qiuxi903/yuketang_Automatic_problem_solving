@@ -3,6 +3,8 @@
 import os
 
 BACKEND_BASE = os.environ.get("BACKEND_BASE", "http://localhost:28080")
+# Agent 内部接口鉴权令牌：与 backend 的 YKT_AGENT_TOKEN 一致时才能调用 /api/agent/**（后端留空 = 不鉴权）
+AGENT_TOKEN = os.environ.get('YKT_AGENT_TOKEN', '')
 MATCHER_BASE = os.environ.get("MATCHER_BASE", "http://localhost:28100")
 COLLECTOR_BASE = os.environ.get("COLLECTOR_BASE", "http://localhost:28200")
 

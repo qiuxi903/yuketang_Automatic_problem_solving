@@ -36,6 +36,7 @@ import com.ykt.platform.vip.VipRequiredException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
@@ -644,6 +645,31 @@ public class VipService {
         e.setGrantedBy(grantedBy);
         entitlementRepository.save(e);
         return expiresAt;
+    }
+
+    // ---------- 定时维护 ----------
+
+    /**
+     * 过期待支付单清理：每 10 分钟把超时未付的 CREATED 单标记 EXPIRED，
+     * 避免订单列表里堆积僵尸单（金额匹配本就按 expiresAt 过滤，此处只是状态收尾）。
+     */
+    @Scheduled(cron = "0 */10 * * * *")
+    public void expireStaleScheduled() {
+        expireStaleOrders(Instant.now());
+    }
+
+    /** 把 expiresAt 早于 before 的待支付单标记 EXPIRED；before 传当前时间即常规清理。 */
+    @Transactional
+    public int expireStaleOrders(Instant before) {
+        List<VipOrder> stale = orderRepository
+                .findByStatusAndExpiresAtBefore(VipOrder.STATUS_CREATED, before);
+        if (stale.isEmpty()) {
+            return 0;
+        }
+        stale.forEach(o -> o.setStatus(VipOrder.STATUS_EXPIRED));
+        orderRepository.saveAll(stale);
+        log.info("已把 {} 个过期待支付订单标记为 EXPIRED", stale.size());
+        return stale.size();
     }
 
     // ---------- 私有工具 ----------

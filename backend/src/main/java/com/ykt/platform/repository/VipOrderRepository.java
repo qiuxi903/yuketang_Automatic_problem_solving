@@ -32,4 +32,7 @@ public interface VipOrderRepository extends JpaRepository<VipOrder, Long> {
             String status, int payableFen, Instant after);
 
     long countByStatus(String status);
+
+    /** 过期待支付单（定时清理任务用）。 */
+    List<VipOrder> findByStatusAndExpiresAtBefore(String status, Instant before);
 }

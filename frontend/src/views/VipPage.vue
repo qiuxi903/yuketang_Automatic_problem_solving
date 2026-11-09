@@ -336,6 +336,7 @@ const orderStatusMeta: Record<VipOrderStatus, { label: string; tone: 'ok' | 'inf
   PAID: { label: '已支付', tone: 'ok' },
   CANCELLED: { label: '已取消', tone: 'info' },
   REJECTED: { label: '已拒单', tone: 'danger' },
+  EXPIRED: { label: '已过期', tone: 'info' },
 }
 
 /** 模板槽位的 row 是 any，走类型化辅助函数取映射。 */
@@ -388,6 +389,15 @@ onBeforeUnmount(stopPolling)
           <span class="stat-sub">{{ card.sub }}</span>
         </div>
       </div>
+
+      <!-- 月卡临期续费提示 -->
+      <el-alert
+        v-if="status?.monthCardActive && monthDaysLeft !== null && monthDaysLeft <= 7"
+        class="renew-alert"
+        type="warning"
+        :closable="false"
+        :title="`月卡仅剩 ${monthDaysLeft} 天，现在续费自动顺延不中断`"
+      />
 
       <!-- 定价区 -->
       <div class="pricing">
@@ -770,6 +780,10 @@ export default { name: 'VipPage' }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.renew-alert {
+  margin-bottom: 14px;
 }
 
 /* —— 定价卡（白卡片 + 主色边框标注推荐，无大面积色块） —— */

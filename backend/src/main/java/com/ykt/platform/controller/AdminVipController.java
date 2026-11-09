@@ -24,6 +24,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -139,6 +142,46 @@ public class AdminVipController {
     @DeleteMapping("/users/{userId}/binding")
     public void unbind(@PathVariable Long userId) {
         adminService.unbind(userId);
+    }
+
+    // ---------- 导出与维护 ----------
+
+    /** 订单流水 CSV 导出（对账用）。 */
+    @GetMapping("/orders/export")
+    public ResponseEntity<byte[]> exportOrders() {
+        return csv(adminService.exportOrdersCsv(), "vip-orders");
+    }
+
+    /** 收款流水 CSV 导出。 */
+    @GetMapping("/pay-notifications/export")
+    public ResponseEntity<byte[]> exportNotifications() {
+        return csv(adminService.exportNotificationsCsv(), "vip-pay-notifications");
+    }
+
+    /** 手动清理过期待支付订单；body 可选 {"before": iso时间}（默认当前时间）。 */
+    @PostMapping("/orders/expire-stale")
+    public java.util.Map<String, Object> expireStale(
+            @org.springframework.web.bind.annotation.RequestBody(required = false) java.util.Map<String, String> body) {
+        java.time.Instant before = body != null && body.get("before") != null && !body.get("before").isBlank()
+                ? java.time.Instant.parse(body.get("before"))
+                : java.time.Instant.now();
+        return java.util.Map.of("expired", adminService.expireStaleOrders(before));
+    }
+
+    /** 手动触发一次 H2 在线备份。 */
+    @PostMapping("/backup")
+    public java.util.Map<String, Object> backup() throws java.io.IOException {
+        return java.util.Map.of("ok", true, "path", adminService.backupNow());
+    }
+
+    private static ResponseEntity<byte[]> csv(String content, String baseName) {
+        String stamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
+        byte[] body = content.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + baseName + "-" + stamp + ".csv")
+                .contentType(MediaType.parseMediaType("text/csv;charset=UTF-8"))
+                .body(body);
     }
 
     // ---------- 单日按批次定价 ----------

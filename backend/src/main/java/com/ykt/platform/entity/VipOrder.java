@@ -24,6 +24,7 @@ public class VipOrder {
     public static final String STATUS_PAID = "PAID";
     public static final String STATUS_CANCELLED = "CANCELLED";
     public static final String STATUS_REJECTED = "REJECTED";
+    public static final String STATUS_EXPIRED = "EXPIRED";
 
     public static final String CHANNEL_LISTEN = "LISTEN";
     public static final String CHANNEL_MANUAL = "MANUAL";

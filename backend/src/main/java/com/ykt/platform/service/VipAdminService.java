@@ -65,6 +65,7 @@ public class VipAdminService {
     private final VipBatchPriceRepository batchPriceRepository;
     private final VipSettingsRepository settingsRepository;
     private final AnswerLibService answerLibService;
+    private final BackupService backupService;
     private final UserRepository userRepository;
     private final VipAccountRepository vipAccountRepository;
     private final VipService vipService;
@@ -79,6 +80,7 @@ public class VipAdminService {
                            VipBatchPriceRepository batchPriceRepository,
                            VipSettingsRepository settingsRepository,
                            AnswerLibService answerLibService,
+                           BackupService backupService,
                            UserRepository userRepository,
                            VipAccountRepository vipAccountRepository,
                            VipService vipService) {
@@ -92,6 +94,7 @@ public class VipAdminService {
         this.batchPriceRepository = batchPriceRepository;
         this.settingsRepository = settingsRepository;
         this.answerLibService = answerLibService;
+        this.backupService = backupService;
         this.userRepository = userRepository;
         this.vipAccountRepository = vipAccountRepository;
         this.vipService = vipService;
@@ -309,6 +312,93 @@ public class VipAdminService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "该用户没有绑定记录"));
         bindingRepository.delete(binding);
         log.info("管理员已解绑用户 {} 的雨课堂账号「{}」", userId, binding.getYktName());
+    }
+
+    // ---------- 导出与维护 ----------
+
+    /** 订单流水 CSV（含 BOM，Excel 直接打开不乱码）。 */
+    @Transactional(readOnly = true)
+    public String exportOrdersCsv() {
+        Map<Long, String> usernames = usernameMap();
+        StringBuilder sb = csvHead("订单号,用户,商品,日期批次,原价分,优惠分,尾数分,实付分,状态,渠道,优惠码,用户留言,管理员备注,申报时间,支付时间,创建时间");
+        for (VipOrder o : orderRepository.findAllByOrderByCreatedAtDesc()) {
+            sb.append(csvRow(
+                    o.getOrderNo(), usernames.getOrDefault(o.getUserId(), ""), kindText(o),
+                    o.getTargetBatch() == null ? "" : o.getTargetBatch(),
+                    o.getOriginalFen(), o.getDiscountFen(), o.getSuffixFen(), o.getPayableFen(),
+                    o.getStatus(), channelText(o.getPayChannel()),
+                    nvl(o.getCouponCode()), nvl(o.getRemark()), nvl(o.getAdminRemark()),
+                    t(o.getClaimedAt()), t(o.getPaidAt()), t(o.getCreatedAt())));
+        }
+        return sb.toString();
+    }
+
+    /** 收款流水 CSV（到账记录池全量）。 */
+    @Transactional(readOnly = true)
+    public String exportNotificationsCsv() {
+        StringBuilder sb = csvHead("时间,渠道,金额分,通知原文,是否核销,核销订单号");
+        for (var n : notificationRepository.findTop50ByOrderByReceivedAtDesc()) {
+            sb.append(csvRow(
+                    t(n.getReceivedAt()), n.getChannel(), n.getAmountFen(),
+                    nvl(n.getRaw()), n.isConsumed() ? "已核销" : "待匹配",
+                    nvl(n.getConsumedByOrderNo())));
+        }
+        return sb.toString();
+    }
+
+    /** 手动触发过期订单清理（可传 before 截止时间；定时任务每 10 分钟也会自动跑）。 */
+    @Transactional
+    public long expireStaleOrders(java.time.Instant before) {
+        return vipService.expireStaleOrders(before);
+    }
+
+    /** 手动触发一次 H2 在线备份，返回备份文件路径。 */
+    public String backupNow() throws java.io.IOException {
+        return backupService.backupNow();
+    }
+
+    private static String kindText(VipOrder o) {
+        return VipOrder.KIND_DATE_PASS.equals(o.getKind()) ? "单日解锁" : "月卡";
+    }
+
+    private static String channelText(String c) {
+        if (c == null) return "";
+        return switch (c) {
+            case "LISTEN" -> "监听";
+            case "MANUAL" -> "人工";
+            case "XUNHU" -> "虎皮椒";
+            default -> c;
+        };
+    }
+
+    private static String nvl(String v) {
+        return v == null ? "" : v;
+    }
+
+    private static String t(java.time.Instant i) {
+        return i == null ? "" : java.time.LocalDateTime.ofInstant(i, java.time.ZoneId.systemDefault())
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+    }
+
+    private static final String CSV_BOM = "\ufeff";
+    private static final String CSV_NEWLINE = "\n";
+
+    private static StringBuilder csvHead(String header) {
+        return new StringBuilder(CSV_BOM).append(header).append(CSV_NEWLINE);
+    }
+
+    private static StringBuilder csvRow(Object... cells) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < cells.length; i++) {
+            String v = String.valueOf(cells[i]);
+            if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+                sb.append('"').append(v.replace("\"", "\"\"")).append('"');
+            } else {
+                sb.append(v);
+            }
+            sb.append(i == cells.length - 1 ? CSV_NEWLINE : ',');
+        }
+        return sb;
     }
 
     // ---------- 单日按批次定价 ----------

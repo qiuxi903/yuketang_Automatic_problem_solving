@@ -19,6 +19,9 @@ import {
   deleteBatchPrice,
   listBatchPrices,
   setBatchPrice,
+  exportOrdersCsv,
+  exportPayNotificationsCsv,
+  expireStaleOrders,
   listVipActivities,
   listVipBindings,
   listVipCoupons,
@@ -86,6 +89,7 @@ const orderStatusMeta: Record<VipOrderStatus, { label: string; tag: 'success' | 
   PAID: { label: '已支付', tag: 'success' },
   CANCELLED: { label: '已取消', tag: 'info' },
   REJECTED: { label: '已拒单', tag: 'danger' },
+  EXPIRED: { label: '已过期', tag: 'info' },
 }
 
 function kindLabel(order: VipOrder) {
@@ -179,6 +183,26 @@ async function removeNotification(row: PayNotificationView) {
 }
 
 /** 粘贴收款通知文本（如「微信支付收款3.47元」）按金额快速核销。 */
+async function onExpireStale() {
+  try {
+    const res = await expireStaleOrders()
+    ElMessage.success(`已清理 ${res.expired} 个过期单`)
+    await loadOrders()
+  } catch {
+    /* 拦截器已提示 */
+  }
+}
+
+async function onExportOrders() {
+  await exportOrdersCsv()
+  ElMessage.success('订单流水已下载')
+}
+
+async function onExportNotes() {
+  await exportPayNotificationsCsv()
+  ElMessage.success('收款流水已下载')
+}
+
 async function matchText() {
   if (!matchRaw.value.trim()) {
     ElMessage.warning('请粘贴收款通知文本')
@@ -661,12 +685,18 @@ onMounted(() => void loadTab(activeTab.value))
             <el-divider direction="vertical" />
             共 {{ orders.length }} 单
           </span>
+          <div class="toolbar-actions">
+            <el-button size="small" @click="onExpireStale">清理过期单</el-button>
+            <el-button size="small" @click="onExportOrders">导出订单 CSV</el-button>
+            <el-button size="small" @click="onExportNotes">导出收款 CSV</el-button>
+          </div>
           <el-radio-group v-model="orderFilter" size="small">
             <el-radio-button value="ALL">全部</el-radio-button>
             <el-radio-button value="CREATED">待支付</el-radio-button>
             <el-radio-button value="PAID">已支付</el-radio-button>
             <el-radio-button value="CANCELLED">已取消</el-radio-button>
             <el-radio-button value="REJECTED">已拒单</el-radio-button>
+            <el-radio-button value="EXPIRED">已过期</el-radio-button>
           </el-radio-group>
         </div>
 

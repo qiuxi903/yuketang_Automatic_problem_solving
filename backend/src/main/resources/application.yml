@@ -45,6 +45,13 @@ ykt:
     # 启动时引导创建的管理员账号：首次部署请改掉默认密码（或用环境变量 YKT_ADMIN_PASSWORD 覆盖）
     username: admin
     password: "${YKT_ADMIN_PASSWORD:admin123}"
+  # Agent 内部接口鉴权令牌：backend 与 agent 两侧设置同一个 YKT_AGENT_TOKEN 后启用；
+  # 留空 = 不鉴权（本地默认）。公网暴露部署时必须配置
+  agent-token: "${YKT_AGENT_TOKEN:}"
+  backup:
+    # H2 在线备份目录与保留份数（每日 03:00 自动备份 + 管理端手动触发）
+    dir: ./backup
+    keep: 7
   vip:
     # 付费闸门总开关：false = VIP 分支按免费版运行（所有批次放行）
     enforce: true

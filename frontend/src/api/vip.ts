@@ -45,7 +45,7 @@ export interface VipProducts {
 }
 
 export type VipOrderKind = 'DATE_PASS' | 'MONTH_CARD'
-export type VipOrderStatus = 'CREATED' | 'PAID' | 'CANCELLED' | 'REJECTED'
+export type VipOrderStatus = 'CREATED' | 'PAID' | 'CANCELLED' | 'REJECTED' | 'EXPIRED'
 
 export interface VipOrder {
   id: number
@@ -341,4 +341,35 @@ export function setBatchPrice(batch: string, priceFen: number) {
 
 export function deleteBatchPrice(batch: string) {
   return client.delete<unknown, void>(`/admin/vip/batch-prices/${encodeURIComponent(batch)}`)
+}
+
+/* —— 导出与维护（管理端） —— */
+
+/** 下载文件（axios blob → 触发浏览器保存）。 */
+export async function downloadFile(path: string, filename: string) {
+  const blob = await client.get<unknown, Blob>(path, { responseType: 'blob' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+export function exportOrdersCsv() {
+  return downloadFile('/admin/vip/orders/export', 'vip-orders.csv')
+}
+
+export function exportPayNotificationsCsv() {
+  return downloadFile('/admin/vip/pay-notifications/export', 'vip-pay-notifications.csv')
+}
+
+/** 手动清理过期待支付订单（定时任务每 10 分钟也会自动跑）。 */
+export function expireStaleOrders() {
+  return client.post<unknown, { expired: number }>('/admin/vip/orders/expire-stale')
+}
+
+/** 手动触发一次 H2 在线备份。 */
+export function triggerBackup() {
+  return client.post<unknown, { ok: boolean; path: string }>('/admin/vip/backup')
 }
