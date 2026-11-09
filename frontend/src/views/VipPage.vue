@@ -161,6 +161,7 @@ async function buyMonthCard() {
 function openPayDialog(order: VipOrder) {
   activeOrder.value = order
   payResult.value = null
+  claimHint.value = null
   payOpen.value = true
   startPolling()
 }
@@ -205,11 +206,24 @@ function stopPolling() {
   }
 }
 
+/** 「我已支付，核实到账」的核实结果提示（未核实到时展示在弹层里，轮询继续） */
+const claimHint = ref<string | null>(null)
+
 async function claimPaid() {
   if (!activeOrder.value) return
   try {
-    await claimVipOrderPaid(activeOrder.value.orderNo)
-    ElMessage.info('已标记「我已付款」，请等待自动到账或管理员确认')
+    const res = await claimVipOrderPaid(activeOrder.value.orderNo)
+    if (res.verified) {
+      payResult.value = 'success'
+      claimHint.value = null
+      stopPolling()
+      ElMessage.success(res.message)
+      await refresh()
+    } else {
+      claimHint.value = res.message
+      ElMessage.warning(res.message)
+      // 保持轮询：到账记录入池后会自动匹配开通
+    }
   } catch {
     /* 拦截器已提示 */
   }
@@ -648,9 +662,16 @@ onBeforeUnmount(stopPolling)
 
           <div class="pd-actions">
             <el-button size="large" @click="cancelActiveOrder">取消订单</el-button>
-            <el-button size="large" type="warning" plain @click="claimPaid">我已完成付款</el-button>
+            <el-button size="large" type="warning" plain @click="claimPaid">我已支付，核实到账</el-button>
           </div>
-          <p class="pd-hint">支付完成后本页会自动检测到账并开通（每 3 秒刷新一次），无需手动刷新。</p>
+          <el-alert
+            v-if="claimHint"
+            class="pd-claim-hint"
+            type="warning"
+            :title="claimHint"
+            :closable="false"
+          />
+          <p class="pd-hint">支付完成后点上方按钮核实到账；本页也会每 3 秒自动检测，到账即开通。</p>
         </div>
       </template>
     </el-dialog>
@@ -1106,6 +1127,9 @@ export default { name: 'VipPage' }
   line-height: 1.6;
   color: var(--ink-400);
   text-align: center;
+}
+.pd-claim-hint {
+  width: 100%;
 }
 .pd-success {
   display: flex;

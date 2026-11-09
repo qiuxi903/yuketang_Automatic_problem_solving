@@ -53,8 +53,13 @@ public class PayNotifyController {
         if (request.amountFen() == null || request.amountFen() <= 0) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amountFen 无效");
         }
-        boolean matched = vipService.payNotify(request.channel(), request.amountFen(), request.raw());
-        return Map.of("matched", matched);
+        // 先入池（未匹配也不丢，供用户「我已支付，核实到账」比对），再尝试匹配待支付订单
+        var saved = vipService.recordNotification(request.channel(), request.amountFen(), request.raw());
+        var order = vipService.payNotify(request.channel(), request.amountFen(), request.raw());
+        if (order != null) {
+            vipService.consumeNotification(saved, order.getOrderNo());
+        }
+        return Map.of("matched", order != null);
     }
 
     /**
@@ -77,8 +82,12 @@ public class PayNotifyController {
         // 虎皮椒金额单位为元（字符串，两位小数），transaction_id 为平台流水
         String money = params.getOrDefault("money", "0");
         int amountFen = new java.math.BigDecimal(money).movePointRight(2).intValue();
-        boolean matched = vipService.payNotify("xunhu", amountFen, params.get("transaction_id"));
-        return Map.of("matched", matched);
+        var saved = vipService.recordNotification("xunhu", amountFen, params.get("transaction_id"));
+        var order = vipService.payNotify("xunhu", amountFen, params.get("transaction_id"));
+        if (order != null) {
+            vipService.consumeNotification(saved, order.getOrderNo());
+        }
+        return Map.of("matched", order != null);
     }
 
     /**

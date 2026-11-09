@@ -6,8 +6,10 @@ import com.ykt.platform.dto.VipCouponView;
 import com.ykt.platform.dto.VipEntitlementView;
 import com.ykt.platform.dto.VipGrantRequest;
 import com.ykt.platform.dto.VipOrderView;
+import com.ykt.platform.dto.VipPayNotificationView;
 import com.ykt.platform.dto.VipSettingsUpdateRequest;
 import com.ykt.platform.dto.VipSettingsView;
+import com.ykt.platform.entity.PayNotification;
 import com.ykt.platform.entity.RainBinding;
 import com.ykt.platform.entity.User;
 import com.ykt.platform.entity.VipAccount;
@@ -17,6 +19,7 @@ import com.ykt.platform.entity.VipCouponUse;
 import com.ykt.platform.entity.VipEntitlement;
 import com.ykt.platform.entity.VipOrder;
 import com.ykt.platform.entity.VipSettings;
+import com.ykt.platform.repository.PayNotificationRepository;
 import com.ykt.platform.repository.RainBindingRepository;
 import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.repository.VipAccountRepository;
@@ -55,6 +58,7 @@ public class VipAdminService {
     private final VipEntitlementRepository entitlementRepository;
     private final VipActivityRepository activityRepository;
     private final RainBindingRepository bindingRepository;
+    private final PayNotificationRepository notificationRepository;
     private final VipSettingsRepository settingsRepository;
     private final UserRepository userRepository;
     private final VipAccountRepository vipAccountRepository;
@@ -66,6 +70,7 @@ public class VipAdminService {
                            VipEntitlementRepository entitlementRepository,
                            VipActivityRepository activityRepository,
                            RainBindingRepository bindingRepository,
+                           PayNotificationRepository notificationRepository,
                            VipSettingsRepository settingsRepository,
                            UserRepository userRepository,
                            VipAccountRepository vipAccountRepository,
@@ -76,6 +81,7 @@ public class VipAdminService {
         this.entitlementRepository = entitlementRepository;
         this.activityRepository = activityRepository;
         this.bindingRepository = bindingRepository;
+        this.notificationRepository = notificationRepository;
         this.settingsRepository = settingsRepository;
         this.userRepository = userRepository;
         this.vipAccountRepository = vipAccountRepository;
@@ -126,6 +132,24 @@ public class VipAdminService {
     @Transactional
     public boolean matchByText(String raw) {
         return vipService.payNotifyText("manual-paste", raw);
+    }
+
+    /** 最近到账记录（含未核销，供管理员核对监听漏单）。 */
+    @Transactional(readOnly = true)
+    public List<VipPayNotificationView> listNotifications() {
+        return notificationRepository.findTop50ByOrderByReceivedAtDesc().stream()
+                .map(n -> new VipPayNotificationView(n.getId(), n.getChannel(), n.getAmountFen(),
+                        n.getRaw(), n.getReceivedAt(), n.isConsumed(), n.getConsumedByOrderNo()))
+                .toList();
+    }
+
+    /** 删除误报的到账记录（如测试通知）。 */
+    @Transactional
+    public void deleteNotification(Long id) {
+        if (!notificationRepository.existsById(id)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "到账记录不存在");
+        }
+        notificationRepository.deleteById(id);
     }
 
     // ---------- 优惠码 ----------

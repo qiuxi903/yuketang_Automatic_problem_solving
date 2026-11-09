@@ -20,6 +20,8 @@ import {
   listVipBindings,
   listVipCoupons,
   listVipEntitlements,
+  deletePayNotification,
+  listPayNotifications,
   listVipOrders,
   matchPayText,
   rejectVipOrder,
@@ -35,6 +37,7 @@ import {
   type VipOrderStatus,
   type VipSettingsView,
   type VipStats,
+  type PayNotificationView,
 } from '@/api/vip'
 import { formatDateTime } from '@/utils/format'
 import { useIsMobile } from '@/utils/useMedia'
@@ -54,6 +57,7 @@ const orderFilter = ref<'ALL' | VipOrderStatus>('ALL')
 const matchRaw = ref('')
 const matching = ref(false)
 const stats = ref<VipStats | null>(null)
+const notifications = ref<PayNotificationView[]>([])
 
 const fen2yuanStats = (fen: number) => (fen / 100).toFixed(2)
 
@@ -102,9 +106,10 @@ function appliesLabel(v: string) {
 async function loadOrders() {
   ordersLoading.value = true
   try {
-    const [list, st] = await Promise.all([listVipOrders(), getVipStats()])
+    const [list, st, notes] = await Promise.all([listVipOrders(), getVipStats(), listPayNotifications()])
     orders.value = list
     stats.value = st
+    notifications.value = notes
   } finally {
     ordersLoading.value = false
   }
@@ -151,6 +156,23 @@ async function reject(order: VipOrder) {
   } catch {
     /* 拦截器已提示 */
   }
+}
+
+const channelLabelNote = (c: string) =>
+  ({ wechat: '微信', alipay: '支付宝', 'manual-paste': '粘贴', xunhu: '虎皮椒' } as Record<string, string>)[c] ?? c
+
+async function removeNotification(row: PayNotificationView) {
+  try {
+    await ElMessageBox.confirm(
+      `删除这笔到账记录（¥${fen2yuan(row.amountFen)}，${formatDateTime(row.receivedAt)}）？删除后无法再被申报核实匹配。`,
+      '删除到账记录', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  await deletePayNotification(row.id)
+  ElMessage.success('已删除')
+  await loadOrders()
 }
 
 /** 粘贴收款通知文本（如「微信支付收款3.47元」）按金额快速核销。 */
@@ -556,6 +578,41 @@ onMounted(() => void loadTab(activeTab.value))
             </div>
           </div>
         </div>
+        <!-- 最近到账记录：监听收到什么一目了然，未核销的可被用户申报核实匹配 -->
+        <div v-if="notifications.length" class="notes-card">
+          <div class="notes-head">
+            <span class="vs-label">最近到账记录（{{ notifications.length }} 条，含未核销）</span>
+            <el-button size="small" :icon="Refresh" @click="loadOrders">刷新</el-button>
+          </div>
+          <el-table :data="notifications" size="small" max-height="180">
+            <el-table-column label="时间" width="150">
+              <template #default="{ row }">{{ formatDateTime(row.receivedAt) }}</template>
+            </el-table-column>
+            <el-table-column label="渠道" width="80">
+              <template #default="{ row }">{{ channelLabelNote(row.channel) }}</template>
+            </el-table-column>
+            <el-table-column label="金额" width="90">
+              <template #default="{ row }">
+                <span class="payable mono-sm">¥{{ fen2yuan(row.amountFen) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="150">
+              <template #default="{ row }">
+                <el-tag v-if="row.consumed" type="success" effect="light" size="small">
+                  已核销 {{ row.consumedByOrderNo }}
+                </el-tag>
+                <el-tag v-else type="warning" effect="light" size="small">待匹配（可被申报核实）</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="raw" label="通知原文" min-width="180" show-overflow-tooltip />
+            <el-table-column label="操作" width="70" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" type="danger" plain @click="removeNotification(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
         <div class="toolbar">
           <span class="stats">
             待支付 <b class="warn">{{ pendingCount }}</b>
@@ -1220,6 +1277,22 @@ onMounted(() => void loadTab(activeTab.value))
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* —— 到账记录卡 —— */
+.notes-card {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
 }
 
 /* —— 订单统计条 —— */

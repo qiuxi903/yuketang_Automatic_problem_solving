@@ -6,6 +6,7 @@ import com.ykt.platform.dto.VipCouponView;
 import com.ykt.platform.dto.VipEntitlementView;
 import com.ykt.platform.dto.VipGrantRequest;
 import com.ykt.platform.dto.VipOrderView;
+import com.ykt.platform.dto.VipPayNotificationView;
 import com.ykt.platform.dto.VipSettingsUpdateRequest;
 import com.ykt.platform.dto.VipSettingsView;
 import com.ykt.platform.dto.VipStatsResponse;
@@ -67,6 +68,18 @@ public class AdminVipController {
     public Map<String, Object> matchText(@RequestBody Map<String, String> body) {
         boolean matched = adminService.matchByText(body.getOrDefault("raw", ""));
         return Map.of("matched", matched);
+    }
+
+    /** 最近到账记录（含未核销）。 */
+    @GetMapping("/pay-notifications")
+    public List<VipPayNotificationView> notifications() {
+        return adminService.listNotifications();
+    }
+
+    /** 删除误报的到账记录。 */
+    @DeleteMapping("/pay-notifications/{id}")
+    public void deleteNotification(@PathVariable Long id) {
+        adminService.deleteNotification(id);
     }
 
     // ---------- 优惠码 ----------

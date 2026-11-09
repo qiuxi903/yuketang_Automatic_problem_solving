@@ -3,6 +3,7 @@ package com.ykt.platform.controller;
 import com.ykt.platform.dto.VipOrderCreateRequest;
 import com.ykt.platform.dto.VipOrderView;
 import com.ykt.platform.dto.VipProductsResponse;
+import com.ykt.platform.dto.VipClaimResultResponse;
 import com.ykt.platform.dto.VipQuotaUnlockRequest;
 import com.ykt.platform.dto.VipRedeemRequest;
 import com.ykt.platform.dto.VipStatusResponse;
@@ -59,11 +60,10 @@ public class VipController {
         return vipService.myOrders(SecurityUtil.currentUserId());
     }
 
-    /** 用户标记「我已完成支付」（人工/监听渠道的提示标记，不改变订单状态）。 */
+    /** 「我已支付，核实到账」：按实付金额比对到账记录池，符合即自动开通。 */
     @PostMapping("/orders/{orderNo}/claim-paid")
-    public Map<String, Boolean> claimPaid(@PathVariable String orderNo) {
-        vipService.claimPaid(SecurityUtil.currentUserId(), orderNo);
-        return Map.of("ok", true);
+    public VipClaimResultResponse claimPaid(@PathVariable String orderNo) {
+        return vipService.claimPaid(SecurityUtil.currentUserId(), orderNo);
     }
 
     @PostMapping("/orders/{orderNo}/cancel")

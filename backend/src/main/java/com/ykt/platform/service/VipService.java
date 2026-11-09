@@ -2,6 +2,7 @@ package com.ykt.platform.service;
 
 import com.ykt.platform.config.VipProperties;
 import com.ykt.platform.dto.PayNotifyRequest;
+import com.ykt.platform.dto.VipClaimResultResponse;
 import com.ykt.platform.dto.PaperManifestResponse;
 import com.ykt.platform.dto.VipActivityView;
 import com.ykt.platform.dto.VipOrderCreateRequest;
@@ -10,6 +11,7 @@ import com.ykt.platform.dto.VipProductsResponse;
 import com.ykt.platform.dto.VipQuotaUnlockRequest;
 import com.ykt.platform.dto.VipRedeemRequest;
 import com.ykt.platform.dto.VipStatusResponse;
+import com.ykt.platform.entity.PayNotification;
 import com.ykt.platform.entity.RainBinding;
 import com.ykt.platform.entity.VipAccount;
 import com.ykt.platform.entity.VipActivity;
@@ -18,6 +20,7 @@ import com.ykt.platform.entity.VipCouponUse;
 import com.ykt.platform.entity.VipEntitlement;
 import com.ykt.platform.entity.VipOrder;
 import com.ykt.platform.entity.VipSettings;
+import com.ykt.platform.repository.PayNotificationRepository;
 import com.ykt.platform.repository.RainBindingRepository;
 import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.repository.VipAccountRepository;
@@ -71,6 +74,7 @@ public class VipService {
     private final VipAccountRepository accountRepository;
     private final VipActivityRepository activityRepository;
     private final RainBindingRepository bindingRepository;
+    private final PayNotificationRepository notificationRepository;
     private final UserRepository userRepository;
     private final AnswerLibService answerLibService;
     private final VipProperties properties;
@@ -83,6 +87,7 @@ public class VipService {
                       VipAccountRepository accountRepository,
                       VipActivityRepository activityRepository,
                       RainBindingRepository bindingRepository,
+                      PayNotificationRepository notificationRepository,
                       UserRepository userRepository,
                       AnswerLibService answerLibService,
                       VipProperties properties) {
@@ -94,6 +99,7 @@ public class VipService {
         this.accountRepository = accountRepository;
         this.activityRepository = activityRepository;
         this.bindingRepository = bindingRepository;
+        this.notificationRepository = notificationRepository;
         this.userRepository = userRepository;
         this.answerLibService = answerLibService;
         this.properties = properties;
@@ -324,15 +330,61 @@ public class VipService {
                 .toList();
     }
 
-    /** 用户点「我已完成支付」：仅作提示标记，订单仍等监听回调或管理员确认。 */
+    /**
+     * 用户点「我已支付，核实到账」：按订单实付金额精确比对到账记录池中未核销的收款，
+     * 符合 → 核销该记录并立即开通（verified=true）；不符合 → 记录申报时间、保持待支付，
+     * 监听回调与管理员确认仍会在后续自动/人工开通（verified=false，message 给用户提示）。
+     */
     @Transactional
-    public void claimPaid(Long userId, String orderNo) {
+    public VipClaimResultResponse claimPaid(Long userId, String orderNo) {
         VipOrder order = ownOrder(userId, orderNo);
-        if (!VipOrder.STATUS_CREATED.equals(order.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "订单当前状态不可标记付款");
+        if (VipOrder.STATUS_PAID.equals(order.getStatus())) {
+            return new VipClaimResultResponse(true, "该订单此前已核实到账并开通");
         }
-        order.setClaimedAt(Instant.now());
+        if (!VipOrder.STATUS_CREATED.equals(order.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "订单当前状态不可申报付款");
+        }
+        Instant now = Instant.now();
+        // 收款不可能早于下单太多：窗口 = 下单前 2 分钟起（留时钟偏差）
+        List<PayNotification> candidates = notificationRepository
+                .findByConsumedFalseAndAmountFenAndReceivedAtAfterOrderByReceivedAtAsc(
+                        order.getPayableFen(), order.getCreatedAt().minusSeconds(120));
+        PayNotification hit = candidates.stream()
+                .filter(n -> !n.getReceivedAt().isAfter(now.plusSeconds(300)))
+                .findFirst()
+                .orElse(null);
+        if (hit != null) {
+            fulfill(order);
+            consumeNotification(hit, order.getOrderNo());
+            log.info("用户申报核实通过：订单 {} 与到账记录 #{}（{} 分）匹配，自动开通",
+                    order.getOrderNo(), hit.getId(), hit.getAmountFen());
+            return new VipClaimResultResponse(true,
+                    String.format("已核实到账 ¥%.2f，权益已开通", hit.getAmountFen() / 100.0));
+        }
+        order.setClaimedAt(now);
         orderRepository.save(order);
+        return new VipClaimResultResponse(false,
+                String.format("暂未检测到 ¥%.2f 的到账记录：请确认已按显示金额精确支付；到账后本页会自动检测并开通（无需重复下单）",
+                        order.getPayableFen() / 100.0));
+    }
+
+    /** 到账记录入池（先存后匹配，没匹配上也不丢，供后续申报核实）。 */
+    @Transactional
+    public PayNotification recordNotification(String channel, int amountFen, String raw) {
+        PayNotification n = new PayNotification();
+        n.setChannel(channel == null || channel.isBlank() ? "unknown" : channel);
+        n.setAmountFen(amountFen);
+        n.setRaw(raw);
+        n.setReceivedAt(Instant.now());
+        return notificationRepository.save(n);
+    }
+
+    /** 核销到账记录（自动匹配或申报核实都回填订单号，便于对账）。 */
+    @Transactional
+    public void consumeNotification(PayNotification notification, String orderNo) {
+        notification.setConsumed(true);
+        notification.setConsumedByOrderNo(orderNo);
+        notificationRepository.save(notification);
     }
 
     @Transactional
@@ -349,8 +401,9 @@ public class VipService {
      * 免签监听回调：按实付金额精确匹配窗口内的待支付订单并自动核销。
      * 撞单（同金额多单）取创建最早的，其余留在待支付由人工兜底；完全无匹配时记日志供人工核对。
      */
+    /** 按金额精确匹配窗口内待支付订单并核销；返回匹配到的订单（null = 未匹配，记录留池待申报核实）。 */
     @Transactional
-    public boolean payNotify(String channel, int amountFen, String raw) {
+    public VipOrder payNotify(String channel, int amountFen, String raw) {
         Instant now = Instant.now();
         List<VipOrder> candidates = orderRepository
                 .findByStatusAndPayableFenAndCreatedAtAfterOrderByCreatedAtAsc(
@@ -359,8 +412,8 @@ public class VipService {
                 .filter(o -> o.getExpiresAt().isAfter(now))
                 .toList();
         if (candidates.isEmpty()) {
-            log.warn("监听回调未匹配到订单：channel={} amountFen={} raw={}", channel, amountFen, raw);
-            return false;
+            log.warn("到账记录未匹配到订单（留池待申报核实）：channel={} amountFen={} raw={}", channel, amountFen, raw);
+            return null;
         }
         VipOrder order = candidates.get(0);
         if (candidates.size() > 1) {
@@ -368,18 +421,24 @@ public class VipService {
                     amountFen, candidates.size(), order.getOrderNo());
         }
         fulfill(order);
-        log.info("监听回调自动核销订单 {}（{} 分，channel={}）", order.getOrderNo(), amountFen, channel);
-        return true;
+        log.info("到账自动核销订单 {}（{} 分，channel={}）", order.getOrderNo(), amountFen, channel);
+        return order;
     }
 
-    /** 从收款通知文本提取金额后走 {@link #payNotify}（后台快速核销 / 监听器统一入口）。 */
+    /** 从收款通知文本提取金额 → 入池 → 匹配订单（管理端快速核销入口）。 */
     @Transactional
     public boolean payNotifyText(String channel, String raw) {
         Integer amountFen = extractAmountFen(raw);
         if (amountFen == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "未能从文本中识别收款金额");
         }
-        return payNotify(channel, amountFen, raw);
+        PayNotification saved = recordNotification(channel, amountFen, raw);
+        VipOrder order = payNotify(channel, amountFen, raw);
+        if (order != null) {
+            consumeNotification(saved, order.getOrderNo());
+            return true;
+        }
+        return false;
     }
 
     /** 订单核销并发放权益（PAID 事实上只允许走这一处，保证幂等）。 */

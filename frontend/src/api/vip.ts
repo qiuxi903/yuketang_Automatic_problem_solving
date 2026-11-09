@@ -190,8 +190,11 @@ export function listMyVipOrders() {
   return client.get<unknown, VipOrder[]>('/vip/orders')
 }
 
+/** 「我已支付，核实到账」：verified=true 表示已核实到账并开通。 */
 export function claimVipOrderPaid(orderNo: string) {
-  return client.post<unknown, { ok: boolean }>(`/vip/orders/${encodeURIComponent(orderNo)}/claim-paid`)
+  return client.post<unknown, { verified: boolean; message: string }>(
+    `/vip/orders/${encodeURIComponent(orderNo)}/claim-paid`,
+  )
 }
 
 export function cancelVipOrder(orderNo: string) {
@@ -295,4 +298,25 @@ export function getVipSettings() {
 
 export function updateVipSettings(payload: VipSettingsUpdatePayload) {
   return client.put<unknown, VipSettingsView>('/admin/vip/settings', payload)
+}
+
+/* —— 到账记录池（管理端） —— */
+
+export interface PayNotificationView {
+  id: number
+  channel: string
+  amountFen: number
+  raw: string | null
+  receivedAt: string
+  consumed: boolean
+  consumedByOrderNo: string | null
+}
+
+/** 最近到账记录（含未核销，监听漏单核对用）。 */
+export function listPayNotifications() {
+  return client.get<unknown, PayNotificationView[]>('/admin/vip/pay-notifications')
+}
+
+export function deletePayNotification(id: number) {
+  return client.delete<unknown, void>(`/admin/vip/pay-notifications/${id}`)
 }
