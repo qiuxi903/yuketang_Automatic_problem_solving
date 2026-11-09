@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import {
-  CircleClose,
+import { CircleClose,
   Collection,
   Document,
   Download,
@@ -12,6 +11,7 @@ import {
   SwitchButton,
   VideoPause,
   VideoPlay,
+  WarningFilled,
 } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
 import { useAuthStore } from '@/store/auth'
@@ -41,7 +41,15 @@ const qrVisible = ref(false)
 const logVisible = ref(false)
 const lastSeen = ref(0)
 const feedRef = ref<HTMLElement>()
+// 二维码等待超时：打开弹窗 30 秒仍无图（Agent 未运行/被拦截/排队过久）→ 明确报错，不再无限转圈
 const now = ref(Date.now())
+
+// 二维码等待超时：打开弹窗 30 秒仍无图（Agent 未运行/被拦截/排队过久）→ 明确报错，不再无限转圈
+const qrWaitSec = computed(() => {
+  if (!qrVisible.value || store.session?.qrcode) return null
+  if (!store.session?.createdAt) return null
+  return Math.max(0, Math.floor((Date.now() - new Date(store.session.createdAt).getTime()) / 1000))
+})
 
 const latest = computed(() => store.events[store.events.length - 1] ?? null)
 const newCount = computed(() => Math.max(0, store.events.length - lastSeen.value))
@@ -448,6 +456,11 @@ defineExpose({
       <div class="qr-wrap">
         <div class="qr-box">
           <img v-if="store.session?.qrcode" :src="store.session.qrcode" alt="雨课堂登录二维码" />
+          <div v-else-if="qrWaitSec !== null && qrWaitSec >= 30" class="qr-error">
+            <el-icon class="qr-error-icon"><WarningFilled /></el-icon>
+            <span>二维码长时间未生成（已等待 {{ qrWaitSec }} 秒）</span>
+            <span class="qr-error-sub">可能原因：Agent 未启动、任务被限流拦截或排队过久。请点「重新获取二维码」重试，或联系管理员确认 Agent 正在运行。</span>
+          </div>
           <div v-else class="qr-pending">
             <el-icon class="spin"><Refresh /></el-icon>
             <span>二维码生成中…</span>
@@ -1001,6 +1014,25 @@ defineExpose({
   color: var(--ink-400);
   font-size: 13px;
 }
+  .qr-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 4px;
+    color: var(--danger);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .qr-error-icon {
+    font-size: 26px;
+  }
+  .qr-error-sub {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--ink-500);
+    line-height: 1.6;
+  }
 .spin {
   font-size: 22px;
   animation: spin 1.1s linear infinite;

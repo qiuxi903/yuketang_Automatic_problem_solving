@@ -67,6 +67,12 @@ public class AgentTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String uri = request.getRequestURI();
+        // 浏览器前端要读取的两个只读端点（二维码/实时帧）放行：登录用户经前端轮询获取，
+        // 无敏感枚举面；其余（含任务领取/状态回传/兜底答题）一律需令牌
+        if ("GET".equalsIgnoreCase(request.getMethod())
+                && (uri.endsWith("/qrcode") || uri.endsWith("/frame"))) {
+            return true;
+        }
         return !uri.startsWith("/api/agent/") && !uri.startsWith("/api/answer/");
     }
 
