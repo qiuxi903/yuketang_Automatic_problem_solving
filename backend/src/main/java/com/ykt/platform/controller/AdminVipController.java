@@ -8,6 +8,7 @@ import com.ykt.platform.dto.VipGrantRequest;
 import com.ykt.platform.dto.VipOrderView;
 import com.ykt.platform.dto.VipSettingsUpdateRequest;
 import com.ykt.platform.dto.VipSettingsView;
+import com.ykt.platform.dto.VipStatsResponse;
 import com.ykt.platform.entity.VipActivity;
 import com.ykt.platform.security.SecurityUtil;
 import com.ykt.platform.service.VipAdminService;
@@ -36,6 +37,12 @@ public class AdminVipController {
     }
 
     // ---------- 订单 ----------
+
+    /** VIP 运营统计：收入（累计/今日/近7日）、订单分布、会员与权益、额度、优惠码。 */
+    @GetMapping("/stats")
+    public VipStatsResponse stats() {
+        return adminService.stats();
+    }
 
     @GetMapping("/orders")
     public List<VipOrderView> orders(@RequestParam(required = false) String status) {

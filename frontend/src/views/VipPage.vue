@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Check, Coin, CreditCard, MagicStick, Medal, Trophy } from '@element-plus/icons-vue'
@@ -72,14 +72,26 @@ function appliesTo(kind: 'DATE' | 'MONTH' | 'ALL', target: 'DATE' | 'MONTH') {
   return kind === 'ALL' || kind === target
 }
 
+/** hero 展示的已解锁日期：前 3 个 + 剩余数量 */
+const unlockedChips = computed(() => {
+  const list = status.value?.unlockedBatches ?? []
+  return { shown: list.slice(0, 3), extra: Math.max(0, list.length - 3) }
+})
+
 const monthDaysLeft = computed(() => {
   const expires = status.value?.monthCardExpiresAt
   if (!expires || !status.value?.monthCardActive) return 0
   return Math.max(0, Math.ceil((new Date(expires).getTime() - Date.now()) / 86400000))
 })
 
-/* 支付弹层倒计时（mm:ss），到期提示刷新订单 */
+/* 支付弹层倒计时（mm:ss）；到期自动停轮询并提示重新下单 */
 const payCountdown = computed(() => countdown(activeOrder.value?.expiresAt ?? null, nowTick.value))
+watch(payCountdown, (c) => {
+  if (c.expired && payOpen.value && !payResult.value) {
+    stopPolling()
+    ElMessage.warning('订单支付窗口已过期：请取消该订单后重新下单（金额尾数会变）')
+  }
+})
 
 async function refresh() {
   try {
@@ -336,6 +348,10 @@ onBeforeUnmount(stopPolling)
           <div class="stat">
             <span class="stat-label"><el-icon><Check /></el-icon> 已解锁日期</span>
             <strong>{{ status.unlockedBatches.length }} 个</strong>
+            <em v-if="unlockedChips.shown.length" class="stat-chips">
+              <span v-for="b in unlockedChips.shown" :key="b" class="chip">{{ b }}</span>
+              <span v-if="unlockedChips.extra" class="chip chip-more">+{{ unlockedChips.extra }}</span>
+            </em>
           </div>
           <div class="stat">
             <span class="stat-label">绑定雨课堂</span>
@@ -749,6 +765,23 @@ export default { name: 'VipPage' }
 }
 .stat-gold {
   color: #ffe9b8;
+}
+.stat-chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.chip {
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 10.5px;
+  font-weight: 700;
+  font-style: normal;
+}
+.chip-more {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 /* —— 主体 —— */

@@ -35,6 +35,11 @@
 - worker.py：读不到账号名不再「12s 放行」（fail-closed），等待到超时明确报错
 - 管理后台可解绑；`ykt.vip.bind-required=false` 关闭
 
+### 运营统计
+- `GET /api/admin/vip/stats`：累计/今日收入、近 7 日收入序列、订单分布、月卡在期人数、单日解锁人次、额度总量、优惠码可用/核销（内存聚合）
+- AdminVip 订单页顶部统计条（含纯 CSS 迷你柱图）；AdminOverview 首卡「VIP 收入」（AdminOverviewResponse 加 vipRevenueFen/vipPendingOrders/vipMonthActiveUsers）
+- 付费页 hero 显示已解锁日期 chips（前 3 + N）；支付弹层倒计时到期自动停轮询并提示重新下单
+
 ### 支付页 / 运营后台
 - `/vip`（VipPage.vue）：金色 hero + 权益状态 + 双定价卡（活动划线价）+ 收款码支付弹层（精确金额/倒计时/3s轮询/成功态）+ 优惠码 + 兑换中心 + 免费额度一键解锁 + 订单记录；暗色/移动端适配
 - `/admin/vip`（AdminVip.vue）四页签：订单管理（确认/拒单/粘贴核销）、优惠码（批量生成四类码）、支付与活动（价格/渠道/收款码上传/监听令牌/限时活动）、用户权益（发月卡/调额度/解绑/撤销）
@@ -47,7 +52,7 @@
 ## 三、已验证 / 未验证（诚实清单）
 
 - ✅ `mvn clean package`（Java 21）通过；`npm run build`（vue-tsc）通过；agent py 编译通过
-- ✅ 端到端冒烟 **17/17**（含 collect 免费放行用例）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
+- ✅ 端到端冒烟 **19/19**（含 collect 免费放行、运营统计口径、概览 VIP 摘要用例）（`python -I docs/vip-smoke.py`）：管理员登录→邀请码注册（赠额度1）→单日订单→监听回调核销→权益生效→错误令牌403→402闸门→免费额度解锁→任务放行→兑换码（限一次）→月卡订单→管理员确认→月卡生效
 - ✅ 浏览器视觉验证：/vip 亮色/暗色/移动端(375px) + 支付弹层移动端 + /admin/vip 移动端卡片视图，UI 与设计系统 v2 统一（var() 令牌）
 - ❌ NOT RUN：虎皮椒渠道联调（无凭据）；pay-listener 对真实微信收款的校准（`--probe-uia` 待用户跑）；
   雨课堂真实扫码的绑定全链路（需真人扫码终验）；暗色/移动端只过了代码层（var() 令牌+断点），未截图细验
@@ -66,6 +71,8 @@
 1. `VipOrder.status` 是 String 不能标 `@Enumerated`（Hibernate AnnotationException）——用常量就别用枚举注解
 2. 后端 jar 必须用 Zulu 21 的 java 跑，PATH 的 17 跑不了
 3. worktree 缺 answer-lib → `/api/vip/products` batches 为空 → 付费页日期下拉是空的
+3b. **Windows 下运行中的 jar 被锁定：`mvn clean package` 会静默失败继续跑旧 jar**——先停后端（含孤儿 java 进程，`netstat -ano | grep 28080` 查 PID 再 taskkill）再打包
+3c. 前端 dev server 是父子进程结构，TaskStop/杀父进程会留孤儿 vite 占 25173（服务旧代码白屏/旧页面）——按端口查 PID `taskkill //PID <pid> //F //T` 连子进程一起杀
 4. GBK 控制台打印 ✓/✗ 会 UnicodeEncodeError——脚本里 `sys.stdout.reconfigure(encoding="utf-8")` 或 `PYTHONIOENCODING=utf-8`
 5. el-table 模板槽 `{ row }` 是 any，直接 `map[row.x]` 会 vue-tsc TS7053——包一层类型化辅助函数
 6. main 的坑全部继承：H2 单实例、端口 bind 探测、uvicorn 按端口补刀、轮询 catch 不要 stop、答案按题号对齐、egui 尺寸下限等（见 main HANDOFF）

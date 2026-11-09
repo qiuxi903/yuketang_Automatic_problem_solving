@@ -40,19 +40,22 @@ public class AdminService {
     private final PaperRepository paperRepository;
     private final QuestionRepository questionRepository;
     private final AnswerLibService answerLibService;
+    private final VipAdminService vipAdminService;
 
     public AdminService(UserRepository userRepository,
                         TaskRepository taskRepository,
                         YktSessionRepository sessionRepository,
                         PaperRepository paperRepository,
                         QuestionRepository questionRepository,
-                        AnswerLibService answerLibService) {
+                        AnswerLibService answerLibService,
+                        VipAdminService vipAdminService) {
         this.userRepository = userRepository;
         this.taskRepository = taskRepository;
         this.sessionRepository = sessionRepository;
         this.paperRepository = paperRepository;
         this.questionRepository = questionRepository;
         this.answerLibService = answerLibService;
+        this.vipAdminService = vipAdminService;
     }
 
     public AdminOverviewResponse overview() {
@@ -77,6 +80,7 @@ public class AdminService {
                         b.batch(), b.papersCount(), b.questions()))
                 .toList();
 
+        com.ykt.platform.dto.VipStatsResponse vip = vipAdminService.stats();
         return new AdminOverviewResponse(
                 users.size(),
                 adminCount,
@@ -87,7 +91,10 @@ public class AdminService {
                 batches.size(),
                 sessions.size(),
                 sessionStatus,
-                batches);
+                batches,
+                vip.totalRevenueFen(),
+                vip.pendingOrders(),
+                vip.monthActiveUsers());
     }
 
     public List<AdminUserView> users() {

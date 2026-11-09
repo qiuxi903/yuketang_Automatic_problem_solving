@@ -269,6 +269,10 @@ export interface AdminOverview {
   sessionCount: number
   sessionStatus: Record<string, number>
   batches: AdminBatchBrief[]
+  /** VIP 收入摘要（VIP 分支） */
+  vipRevenueFen?: number
+  vipPendingOrders?: number
+  vipMonthActiveUsers?: number
 }
 
 export interface AdminUserView {

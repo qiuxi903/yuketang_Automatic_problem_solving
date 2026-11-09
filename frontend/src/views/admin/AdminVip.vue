@@ -14,6 +14,7 @@ import {
   getPayQrImages,
   getVipProducts,
   getVipSettings,
+  getVipStats,
   grantVip,
   listVipActivities,
   listVipBindings,
@@ -33,6 +34,7 @@ import {
   type VipOrder,
   type VipOrderStatus,
   type VipSettingsView,
+  type VipStats,
 } from '@/api/vip'
 import { formatDateTime } from '@/utils/format'
 import { useIsMobile } from '@/utils/useMedia'
@@ -51,6 +53,21 @@ const ordersLoading = ref(false)
 const orderFilter = ref<'ALL' | VipOrderStatus>('ALL')
 const matchRaw = ref('')
 const matching = ref(false)
+const stats = ref<VipStats | null>(null)
+
+const fen2yuanStats = (fen: number) => (fen / 100).toFixed(2)
+
+/** 近 7 日柱图高度百分比（最大值满高，全 0 时给出 4% 的底柱） */
+const dailyBars = computed(() => {
+  const daily = stats.value?.dailyRevenue ?? []
+  const max = Math.max(1, ...daily.map((d) => d.revenueFen))
+  return daily.map((d) => ({
+    date: d.date.slice(5), // MM-dd
+    revenueFen: d.revenueFen,
+    orders: d.orders,
+    height: d.revenueFen === 0 ? 4 : Math.max(6, Math.round((d.revenueFen / max) * 100)),
+  }))
+})
 
 const filteredOrders = computed(() =>
   orders.value.filter((o) => orderFilter.value === 'ALL' || o.status === orderFilter.value),
@@ -85,7 +102,9 @@ function appliesLabel(v: string) {
 async function loadOrders() {
   ordersLoading.value = true
   try {
-    orders.value = await listVipOrders()
+    const [list, st] = await Promise.all([listVipOrders(), getVipStats()])
+    orders.value = list
+    stats.value = st
   } finally {
     ordersLoading.value = false
   }
@@ -500,6 +519,43 @@ onMounted(() => void loadTab(activeTab.value))
     <el-tabs v-model="activeTab" class="vip-tabs" @tab-change="loadTab">
       <!-- ================= 订单管理 ================= -->
       <el-tab-pane label="订单管理" name="orders">
+        <!-- 统计条：收入 / 订单 / 会员 / 额度 / 优惠码 -->
+        <div v-if="stats" class="vip-stats">
+          <div class="vs-cell">
+            <span class="vs-label">累计收入</span>
+            <strong class="vs-gold">¥{{ fen2yuanStats(stats.totalRevenueFen) }}</strong>
+            <em>今日 ¥{{ fen2yuanStats(stats.todayRevenueFen) }}</em>
+          </div>
+          <div class="vs-cell">
+            <span class="vs-label">订单</span>
+            <strong>已付 {{ stats.paidOrders }}</strong>
+            <em>待支付 <b :class="{ 'vs-warn': stats.pendingOrders > 0 }">{{ stats.pendingOrders }}</b> · 拒单 {{ stats.rejectedOrders }}</em>
+          </div>
+          <div class="vs-cell">
+            <span class="vs-label">月卡在期</span>
+            <strong>{{ stats.monthActiveUsers }} 人</strong>
+            <em>单日解锁 {{ stats.dateEntitlements }} 人次</em>
+          </div>
+          <div class="vs-cell">
+            <span class="vs-label">免费额度</span>
+            <strong>{{ stats.freeQuotaTotal }} 次</strong>
+            <em>全体用户剩余合计</em>
+          </div>
+          <div class="vs-cell">
+            <span class="vs-label">优惠码</span>
+            <strong>可用 {{ stats.couponsActive }}</strong>
+            <em>累计核销 {{ stats.couponsUsed }} 次</em>
+          </div>
+          <div class="vs-cell vs-chart">
+            <span class="vs-label">近 7 日收入</span>
+            <div class="vs-bars">
+              <div v-for="b in dailyBars" :key="b.date" class="vs-bar-col">
+                <div class="vs-bar" :style="{ height: b.height + '%' }" />
+                <span class="vs-bar-date">{{ b.date }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
         <div class="toolbar">
           <span class="stats">
             待支付 <b class="warn">{{ pendingCount }}</b>
@@ -526,36 +582,36 @@ onMounted(() => void loadTab(activeTab.value))
         </div>
 
         <el-table v-if="!isMobile" :data="filteredOrders" v-loading="ordersLoading" size="large">
-          <el-table-column prop="orderNo" label="订单号" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="username" label="用户" width="110" />
-          <el-table-column label="商品" min-width="130">
+          <el-table-column prop="orderNo" label="订单号" min-width="130" show-overflow-tooltip />
+          <el-table-column prop="username" label="用户" width="90" />
+          <el-table-column label="商品" min-width="105">
             <template #default="{ row }">{{ kindLabel(row) }}</template>
           </el-table-column>
-          <el-table-column label="原价" width="90">
+          <el-table-column label="原价" width="78">
             <template #default="{ row }"><span class="mono-sm">¥{{ fen2yuan(row.originalFen) }}</span></template>
           </el-table-column>
-          <el-table-column label="实付" width="110">
+          <el-table-column label="实付" width="98">
             <template #default="{ row }">
               <span class="payable mono-sm">¥{{ fen2yuan(row.payableFen) }}</span>
               <div v-if="row.couponCode" class="sub-line">{{ row.couponCode }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="渠道" width="86">
+          <el-table-column label="渠道" width="70">
             <template #default="{ row }">
               {{ channelLabel(row.payChannel) }}
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="92">
+          <el-table-column label="状态" width="80">
             <template #default="{ row }">
               <el-tag :type="orderMetaOf(row).tag" effect="light">
                 {{ orderMetaOf(row).label }}
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="创建时间" min-width="150">
+          <el-table-column label="创建时间" min-width="140">
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="170" fixed="right">
+          <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <template v-if="row.status === 'CREATED'">
                 <el-button size="small" type="success" plain @click="confirm(row)">确认到账</el-button>
@@ -902,7 +958,7 @@ onMounted(() => void loadTab(activeTab.value))
             <p class="form-hint">1:1 绑定防帮做；用户扫码不一致会被拒。解绑后可重新绑定。</p>
             <el-empty v-if="!bindings.length" description="还没有绑定记录" :image-size="60" />
             <el-table v-else :data="bindings" size="small">
-              <el-table-column prop="username" label="用户" width="110" />
+              <el-table-column prop="username" label="用户" width="90" />
               <el-table-column prop="yktName" label="雨课堂账号" min-width="120" />
               <el-table-column label="绑定时间" min-width="140">
                 <template #default="{ row }">{{ formatDateTime(row.boundAt) }}</template>
@@ -919,7 +975,7 @@ onMounted(() => void loadTab(activeTab.value))
         <div class="panel-card mt">
           <h4>权益记录</h4>
           <el-table :data="entitlements" size="small" max-height="420">
-            <el-table-column prop="username" label="用户" width="110" />
+            <el-table-column prop="username" label="用户" width="90" />
             <el-table-column label="类型" width="120">
               <template #default="{ row }">
                 {{ row.kind === 'MONTH' ? '月卡' : `日期 ${row.targetBatch}` }}
@@ -1166,9 +1222,97 @@ onMounted(() => void loadTab(activeTab.value))
   margin-top: 10px;
 }
 
+/* —— 订单统计条 —— */
+.vip-stats {
+  display: grid;
+  /* 自适应列数：宽屏 6 列，窄屏自动换行，柱图列固定独占一行 */
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+.vs-chart {
+  grid-column: 1 / -1;
+}
+.vs-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.vs-label {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.vs-cell strong {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--ink-900);
+  white-space: nowrap;
+}
+.vs-cell strong.vs-gold {
+  color: var(--amber);
+}
+.vs-cell em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--ink-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-cell em b.vs-warn {
+  color: var(--el-color-warning);
+}
+.vs-chart .vs-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: end;
+  gap: 4px;
+  height: 46px;
+  margin-top: 2px;
+}
+.vs-bar-col {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.vs-bar {
+  width: 100%;
+  max-width: 12px;
+  min-width: 5px;
+  border-radius: 3px 3px 0 0;
+  background: var(--amber);
+  opacity: 0.85;
+}
+.vs-bar-date {
+  font-size: 9px;
+  color: var(--ink-400);
+  transform: scale(0.85);
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+}
+
 @media (max-width: 768px) {
   .admin-vip {
     padding: 14px 12px 28px;
+  }
+  .vip-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .vs-chart {
+    grid-column: 1 / -1;
+  }
+  .vs-chart .vs-bars {
+    height: 52px;
   }
   .pay-grid {
     grid-template-columns: 1fr;

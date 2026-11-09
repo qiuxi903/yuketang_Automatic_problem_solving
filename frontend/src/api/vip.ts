@@ -151,6 +151,22 @@ export interface VipSettingsUpdatePayload {
   payNote?: string
 }
 
+export interface VipStats {
+  totalRevenueFen: number
+  todayRevenueFen: number
+  /** 近 7 日收入（含今日，升序） */
+  dailyRevenue: { date: string; revenueFen: number; orders: number }[]
+  paidOrders: number
+  pendingOrders: number
+  cancelledOrders: number
+  rejectedOrders: number
+  monthActiveUsers: number
+  dateEntitlements: number
+  freeQuotaTotal: number
+  couponsActive: number
+  couponsUsed: number
+}
+
 /* —— 用户侧 —— */
 
 export function getVipStatus() {
@@ -196,6 +212,11 @@ export function listVipOrders(status?: VipOrderStatus) {
   return client.get<unknown, VipOrder[]>('/admin/vip/orders', {
     params: status ? { status } : undefined,
   })
+}
+
+/** VIP 运营统计：收入、订单分布、会员与权益、额度、优惠码。 */
+export function getVipStats() {
+  return client.get<unknown, VipStats>('/admin/vip/stats')
 }
 
 export function confirmVipOrder(orderNo: string, adminRemark?: string) {

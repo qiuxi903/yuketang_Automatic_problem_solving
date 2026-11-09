@@ -13,7 +13,15 @@ const data = ref<AdminOverview | null>(null)
 const stats = computed(() => {
   const d = data.value
   if (!d) return []
+  const vipCard = d.vipRevenueFen === undefined ? [] : [
+    {
+      label: 'VIP 收入',
+      value: `¥${(d.vipRevenueFen / 100).toFixed(2)}`,
+      sub: `待支付 ${d.vipPendingOrders} · 月卡在期 ${d.vipMonthActiveUsers} 人`,
+    },
+  ]
   return [
+    ...vipCard,
     { label: '平台用户', value: d.userCount, sub: `管理员 ${d.adminCount}` },
     { label: '作答任务', value: d.taskCount, sub: `会话 ${d.sessionCount}` },
     { label: '试卷总数', value: d.paperCount, sub: `批次 ${d.batchCount}` },

@@ -10,6 +10,7 @@ import com.ykt.platform.dto.VipSettingsUpdateRequest;
 import com.ykt.platform.dto.VipSettingsView;
 import com.ykt.platform.entity.RainBinding;
 import com.ykt.platform.entity.User;
+import com.ykt.platform.entity.VipAccount;
 import com.ykt.platform.entity.VipActivity;
 import com.ykt.platform.entity.VipCoupon;
 import com.ykt.platform.entity.VipCouponUse;
@@ -18,6 +19,7 @@ import com.ykt.platform.entity.VipOrder;
 import com.ykt.platform.entity.VipSettings;
 import com.ykt.platform.repository.RainBindingRepository;
 import com.ykt.platform.repository.UserRepository;
+import com.ykt.platform.repository.VipAccountRepository;
 import com.ykt.platform.repository.VipActivityRepository;
 import com.ykt.platform.repository.VipCouponRepository;
 import com.ykt.platform.repository.VipCouponUseRepository;
@@ -55,6 +57,7 @@ public class VipAdminService {
     private final RainBindingRepository bindingRepository;
     private final VipSettingsRepository settingsRepository;
     private final UserRepository userRepository;
+    private final VipAccountRepository vipAccountRepository;
     private final VipService vipService;
 
     public VipAdminService(VipOrderRepository orderRepository,
@@ -65,6 +68,7 @@ public class VipAdminService {
                            RainBindingRepository bindingRepository,
                            VipSettingsRepository settingsRepository,
                            UserRepository userRepository,
+                           VipAccountRepository vipAccountRepository,
                            VipService vipService) {
         this.orderRepository = orderRepository;
         this.couponRepository = couponRepository;
@@ -74,6 +78,7 @@ public class VipAdminService {
         this.bindingRepository = bindingRepository;
         this.settingsRepository = settingsRepository;
         this.userRepository = userRepository;
+        this.vipAccountRepository = vipAccountRepository;
         this.vipService = vipService;
     }
 
@@ -347,6 +352,101 @@ public class VipAdminService {
     public boolean listenTokenValid(String token) {
         VipSettings s = vipService.settings();
         return s.getListenToken() != null && s.getListenToken().equals(token);
+    }
+
+    // ---------- 统计 ----------
+
+    /**
+     * VIP 运营统计：收入（累计/今日/近7日）、订单分布、会员与权益、额度、优惠码。
+     * 数据量小（本地 H2），直接内存聚合，避免为统计加索引与 native 查询。
+     */
+    @Transactional(readOnly = true)
+    public com.ykt.platform.dto.VipStatsResponse stats() {
+        Instant now = Instant.now();
+        java.time.LocalDate today = java.time.LocalDate.now();
+
+        List<VipOrder> orders = orderRepository.findAll();
+        long totalRevenue = 0;
+        long todayRevenue = 0;
+        long paid = 0;
+        long pending = 0;
+        long cancelled = 0;
+        long rejected = 0;
+        // 近 7 日收入桶（含今日，升序）
+        java.time.LocalDate[] days = new java.time.LocalDate[7];
+        Map<String, long[]> buckets = new java.util.LinkedHashMap<>(); // date -> [revenueFen, orders]
+        for (int i = 6; i >= 0; i--) {
+            java.time.LocalDate d = today.minusDays(i);
+            days[6 - i] = d;
+            buckets.put(d.toString(), new long[2]);
+        }
+        for (VipOrder o : orders) {
+            switch (o.getStatus() == null ? "" : o.getStatus()) {
+                case VipOrder.STATUS_PAID -> {
+                    paid++;
+                    totalRevenue += o.getPayableFen();
+                    if (o.getPaidAt() != null) {
+                        String d = java.time.LocalDate.ofInstant(o.getPaidAt(), java.time.ZoneId.systemDefault()).toString();
+                        long[] bucket = buckets.get(d);
+                        if (bucket != null) {
+                            bucket[0] += o.getPayableFen();
+                            bucket[1] += 1;
+                        }
+                        String todayKey = today.toString();
+                        if (d.equals(todayKey)) {
+                            todayRevenue += o.getPayableFen();
+                        }
+                    }
+                }
+                case VipOrder.STATUS_CREATED -> {
+                    // 过期的待支付单不算「待处理」
+                    if (o.getExpiresAt() == null || o.getExpiresAt().isAfter(now)) {
+                        pending++;
+                    }
+                }
+                case VipOrder.STATUS_CANCELLED -> cancelled++;
+                case VipOrder.STATUS_REJECTED -> rejected++;
+                default -> { }
+            }
+        }
+        List<com.ykt.platform.dto.VipStatsResponse.DailyRevenue> daily = new ArrayList<>();
+        for (java.time.LocalDate d : days) {
+            long[] bucket = buckets.get(d.toString());
+            daily.add(new com.ykt.platform.dto.VipStatsResponse.DailyRevenue(
+                    d.toString(), bucket == null ? 0 : bucket[0], bucket == null ? 0 : bucket[1]));
+        }
+
+        // 会员与权益
+        List<VipEntitlement> entitlements = entitlementRepository.findAll();
+        long monthActiveUsers = entitlements.stream()
+                .filter(e -> !e.isRevoked() && VipEntitlement.KIND_MONTH.equals(e.getKind())
+                        && e.getExpiresAt() != null && e.getExpiresAt().isAfter(now))
+                .map(VipEntitlement::getUserId)
+                .distinct()
+                .count();
+        long dateEntitlements = entitlements.stream()
+                .filter(e -> !e.isRevoked() && VipEntitlement.KIND_DATE.equals(e.getKind()))
+                .count();
+
+        // 免费额度总量
+        long freeQuotaTotal = 0;
+        for (com.ykt.platform.entity.VipAccount acc : vipAccountRepository.findAll()) {
+            freeQuotaTotal += Math.max(0, acc.getFreeQuota());
+        }
+
+        // 优惠码：可用数 + 累计核销次数
+        long couponsActive = couponRepository.findAll().stream()
+                .filter(c -> c.usableAt(now))
+                .count();
+        long couponsUsed = couponRepository.findAll().stream()
+                .mapToLong(VipCoupon::usedCountOrDefault)
+                .sum();
+
+        return new com.ykt.platform.dto.VipStatsResponse(
+                totalRevenue, todayRevenue, daily,
+                paid, pending, cancelled, rejected,
+                monthActiveUsers, dateEntitlements, freeQuotaTotal,
+                couponsActive, couponsUsed);
     }
 
     // ---------- 私有工具 ----------
