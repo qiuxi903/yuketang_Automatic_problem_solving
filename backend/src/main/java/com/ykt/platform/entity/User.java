@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -45,6 +46,10 @@ public class User {
 
     /** 上次改密时间：早于该时间签发的 JWT 全部失效（管理员改密 = 踢下线）。 */
     private Instant passwordUpdatedAt;
+
+    /** 头像（base64 dataURL，前端压缩后存储；空 = 用用户名首字占位）。 */
+    @Lob
+    private String avatar;
 
     public Long getId() {
         return id;
@@ -120,6 +125,14 @@ public class User {
 
     public void setPasswordUpdatedAt(Instant passwordUpdatedAt) {
         this.passwordUpdatedAt = passwordUpdatedAt;
+    }
+
+    public String getAvatar() {
+        return avatar;
+    }
+
+    public void setAvatar(String avatar) {
+        this.avatar = avatar;
     }
 
     public void setCreatedAt(Instant createdAt) {

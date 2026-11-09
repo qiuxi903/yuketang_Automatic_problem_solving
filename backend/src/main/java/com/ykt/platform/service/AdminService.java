@@ -134,6 +134,35 @@ public class AdminService {
                 .toList();
     }
 
+    /** 管理员修改用户名（登录名同步变更）。 */
+    @Transactional
+    public String changeUsername(Long userId, String newUsername) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在"));
+        if (newUsername == null || newUsername.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能为空");
+        }
+        newUsername = newUsername.trim();
+        if (newUsername.equals(user.getUsername())) {
+            return newUsername;
+        }
+        if (!java.util.regex.Pattern.compile("^[一-龥A-Za-z0-9_]{2,20}$").matcher(newUsername).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "用户名需 2-20 位，只能包含中文、字母、数字或下划线");
+        }
+        if (newUsername.matches("\\d+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字");
+        }
+        if (userRepository.existsByUsername(newUsername)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
+        }
+        user.setUsername(newUsername);
+        // 改名踢下线：让各端用新名字重新登录
+        user.setPasswordUpdatedAt(java.time.Instant.now());
+        userRepository.save(user);
+        return newUsername;
+    }
+
     /** 管理员重置用户密码：规则与注册一致，重置后旧 token 全部失效（强制重新登录）。 */
     @Transactional
     public void resetPassword(Long userId, String newPassword) {

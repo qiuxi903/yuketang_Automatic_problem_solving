@@ -12,6 +12,7 @@ import {
   Setting,
   Sunny,
   SwitchButton,
+  User,
   UserFilled,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
@@ -137,7 +138,10 @@ function handleLogout() {
 
         <el-dropdown trigger="click">
           <span class="user-chip">
-            <span class="avatar"><UserFilled /></span>
+            <span class="avatar">
+              <img v-if="auth.avatar" :src="auth.avatar" alt="头像" />
+              <UserFilled v-else />
+            </span>
             <span class="user-name">{{ auth.username }}</span>
             <StatusPill :tone="auth.isAdmin ? 'accent' : 'info'" :dot="false">
               {{ auth.isAdmin ? '管理员' : '用户' }}
@@ -146,6 +150,7 @@ function handleLogout() {
           </span>
           <template #dropdown>
             <el-dropdown-menu>
+              <el-dropdown-item :icon="User" @click="go('profile')">个人设置</el-dropdown-item>
               <el-dropdown-item v-if="auth.isAdmin" :icon="Setting" @click="go('admin-settings')">
                 系统设置
               </el-dropdown-item>
@@ -454,9 +459,15 @@ function handleLogout() {
   width: 24px;
   height: 24px;
   border-radius: 50%;
+  overflow: hidden;
   background: var(--surface-3);
   color: var(--ink-500);
   font-size: 13px;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .user-name {
   font-size: 13px;

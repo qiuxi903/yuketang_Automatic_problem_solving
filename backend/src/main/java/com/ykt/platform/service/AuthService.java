@@ -1,6 +1,10 @@
 package com.ykt.platform.service;
 
+import com.ykt.platform.dto.ChangePasswordRequest;
+import com.ykt.platform.dto.ChangeUsernameRequest;
 import com.ykt.platform.dto.LoginRequest;
+import com.ykt.platform.dto.MeResponse;
+import com.ykt.platform.dto.SetAvatarRequest;
 import com.ykt.platform.dto.LoginResponse;
 import com.ykt.platform.dto.RegisterRequest;
 import com.ykt.platform.dto.RegisterResponse;
@@ -9,6 +13,8 @@ import com.ykt.platform.entity.User;
 import com.ykt.platform.repository.LoginLogRepository;
 import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.util.ClientIp;
+
+import java.util.List;
 
 import com.ykt.platform.security.JwtService;
 import org.springframework.http.HttpStatus;
@@ -131,6 +137,109 @@ public class AuthService {
         } catch (Exception ex) {
             // 日志失败不影响登录主流程
         }
+    }
+
+    // ---------- 账号中心（个人设置） ----------
+
+    /** 当前用户信息（含头像）。 */
+    @Transactional(readOnly = true)
+    public MeResponse me(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在"));
+        return new MeResponse(user.getId(), user.getUsername(), roleOf(user), user.getAvatar(),
+                user.getCreatedAt(), user.getLastLoginIp(), user.getLastLoginLocation(), user.getLastLoginAt());
+    }
+
+    /**
+     * 修改用户名（登录名）：规则同注册、不可与现有用户重名。
+     * 改名后 JwtAuthFilter 会用库里的最新用户名下发（约 30 秒内生效），登录名同步变更。
+     */
+    @Transactional
+    public String changeUsername(Long userId, ChangeUsernameRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在"));
+        String newUsername = request.username() == null ? "" : request.username().trim();
+        if (newUsername.equals(user.getUsername())) {
+            return newUsername;
+        }
+        if (!USERNAME_RE.matcher(newUsername).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "用户名需 2-20 位，只能包含中文、字母、数字或下划线");
+        }
+        if (newUsername.matches("\\d+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字，太简单容易被猜");
+        }
+        if (userRepository.existsByUsername(newUsername)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在，换一个试试");
+        }
+        user.setUsername(newUsername);
+        userRepository.save(user);
+        return newUsername;
+    }
+
+    /** 本人修改密码：验证旧密码；成功后其它设备的登录态失效。 */
+    @Transactional
+    public void changePassword(Long userId, ChangePasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在"));
+        if (!passwordEncoder.matches(request.oldPassword(), user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "旧密码不正确");
+        }
+        if (request.newPassword() == null || request.newPassword().length() < 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "新密码至少 8 位");
+        }
+        if (!request.newPassword().matches("(?=.*[A-Za-z])(?=.*\\d).+")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "新密码需同时包含字母和数字");
+        }
+        if (passwordEncoder.matches(request.newPassword(), user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "新密码不能与旧密码相同");
+        }
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        user.setPasswordUpdatedAt(java.time.Instant.now());
+        userRepository.save(user);
+    }
+
+    /** 设置头像（base64 dataURL；传空清除）。 */
+    @Transactional
+    public void setAvatar(Long userId, SetAvatarRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "用户不存在"));
+        String avatar = request.avatar();
+        if (avatar != null && avatar.length() > 400_000) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "头像太大（限制约 300KB），请换小图");
+        }
+        user.setAvatar(avatar == null || avatar.isBlank() ? null : avatar);
+        userRepository.save(user);
+    }
+
+    /** 公开头像（管理端/顶栏展示），无头像返回 404。 */
+    @Transactional(readOnly = true)
+    public org.springframework.http.ResponseEntity<byte[]> avatarImage(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        String avatar = user.getAvatar();
+        if (avatar == null || !avatar.startsWith("data:image/")) {
+            throw new ResponseStatusException(org.springframework.http.HttpStatus.NOT_FOUND);
+        }
+        int comma = avatar.indexOf(',');
+        String meta = avatar.substring(5, comma); // image/png;base64
+        String contentType = meta.split(";")[0];
+        byte[] bytes = java.util.Base64.getDecoder().decode(avatar.substring(comma + 1));
+        return org.springframework.http.ResponseEntity.ok()
+                .header("Cache-Control", "no-cache")
+                .header("Content-Type", contentType)
+                .body(bytes);
+    }
+
+    /** 我的登录记录（最近 50 条）。 */
+    @Transactional(readOnly = true)
+    public List<LoginLog> myLoginLogs(Long userId) {
+        return loginLogRepository.findByUserIdOrderByCreatedAtDesc(userId,
+                org.springframework.data.domain.PageRequest.of(0, 50));
+    }
+
+    private static String roleOf(User user) {
+        return user.getRole() == null || user.getRole().isBlank() ? "USER" : user.getRole();
     }
 
     private static String nvl(String v) {

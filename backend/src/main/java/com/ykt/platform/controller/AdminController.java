@@ -61,6 +61,14 @@ public class AdminController {
         return adminService.tasks();
     }
 
+    /** 管理员修改用户名。 */
+    @PutMapping("/users/{id}/username")
+    public java.util.Map<String, Object> changeUsername(@PathVariable Long id,
+                                                        @RequestBody java.util.Map<String, String> body) {
+        String username = adminService.changeUsername(id, body.get("username"));
+        return java.util.Map.of("ok", true, "username", username);
+    }
+
     /** 管理员重置用户密码（重置后该用户所有登录态失效）。 */
     @PutMapping("/users/{id}/password")
     public java.util.Map<String, Object> resetPassword(@PathVariable Long id,
