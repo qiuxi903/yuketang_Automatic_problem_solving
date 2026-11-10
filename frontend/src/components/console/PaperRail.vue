@@ -34,8 +34,14 @@ interface DateGroup {
 const expandedDates = ref<string[]>([])
 
 const dateGroups = computed<DateGroup[]>(() => {
+  // 选了日期后只展示那一天的卷子（做题必须先选日期，默认做该日期全部、可单独勾选）
+  const opt = waitingBatch.value && store.selectedBatch
+    ? store.batchOptions?.options.find((o) => o.batch === store.selectedBatch)
+    : null
+  const allow = opt ? new Set([...opt.matchedPapers, ...opt.missedPapers]) : null
   const map = new Map<string, typeof store.resultRows>()
   for (const row of store.resultRows) {
+    if (allow && !allow.has(row.name)) continue
     const date = store.paperDateOf(row.name)
     const list = map.get(date) ?? []
     list.push(row)
