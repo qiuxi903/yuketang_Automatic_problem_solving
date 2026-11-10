@@ -208,8 +208,19 @@ async function rescan() {
   qrVisible.value = true
 }
 
-/** 关闭会话后回到扫码登录状态：自动弹出扫码窗，Agent 下一帧新码立即可见。 */
+/** 关闭会话回到扫码登录：任务活跃时关闭当前会话并弹窗（Agent 换码循环自动刷出新码）；
+    任务已结束时直接开新任务出新码——旧会话已无人管，等它出新码只会一直转圈。 */
 async function closeSessionAndRescan() {
+  const t = store.task
+  const active = !!t && ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED'].includes(t.status)
+  if (!active) {
+    const id = await store.startTask()
+    if (id) {
+      ElMessage.success('新任务已创建，请扫码登录雨课堂')
+      qrVisible.value = true
+    }
+    return
+  }
   await store.closeActiveSession()
   qrVisible.value = true
 }
