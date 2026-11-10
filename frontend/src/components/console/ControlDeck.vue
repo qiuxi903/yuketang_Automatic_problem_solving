@@ -382,15 +382,7 @@ defineExpose({
           <p v-if="store.canPause" class="hint">
             {{ store.task?.status === 'PAUSED'
               ? '点「继续做题」会接着处理剩余卷子，已完成的不会重做。'
-              : '暂停后 Agent 在安全点停下；想彻底结束请到「我的任务」里中断。' }}
-          </p>
-        </div>
-
-        <!-- 换号放在扫码/会话之前：要换账号时先看到它，避免直接点开始被自动登录成上一个人 -->
-        <div class="menu-group">
-          <span class="eyebrow">换号 / 重新扫码</span>
-            <p class="hint">
-            要换雨课堂账号时点这里：Agent 会清空当前登录态并弹二维码，不会沿用上一个人的账号。
+              : '暂停后 Agent 在安全点停下，随时可以继续。' }}
           </p>
         </div>
 
@@ -710,6 +702,22 @@ defineExpose({
   display: none;
 }
 
+.autopilot-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--accent-050);
+  border: 1px solid var(--accent-200);
+  border-radius: var(--r-md);
+}
+.autopilot-text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-600);
+}
+
 @media (max-width: 768px) {
   /* 移动端减负：标题行隐藏（分段标签已表明当前页），状态行只留状态点 */
   .deck-title {
@@ -745,22 +753,6 @@ defineExpose({
     gap: 14px;
   }
   .menu-group {
-
-.autopilot-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  background: var(--accent-050);
-  border: 1px solid var(--accent-200);
-  border-radius: var(--r-md);
-}
-.autopilot-text {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-600);
-}
     gap: 9px;
   }
   /* 触控目标加大：手机上按钮统一 46px 高 */

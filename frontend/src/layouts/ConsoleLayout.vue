@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { CaretBottom, Coin, Collection, DataLine, Monitor, Moon, Setting, Sunny, SwitchButton, User, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
@@ -12,10 +12,6 @@ const router = useRouter()
 const auth = useAuthStore()
 const consoleStore = useConsoleStore()
 const theme = useTheme()
-
-onMounted(() => {
-  void consoleStore.loadMyTasks()
-})
 
 const navItems = computed(() => {
   const items = [
@@ -501,6 +497,4 @@ function handleLogout() {
     border: 1.5px solid var(--accent);
   }
 }
-
-/* —— 我的任务抽屉 —— */
 </style>
