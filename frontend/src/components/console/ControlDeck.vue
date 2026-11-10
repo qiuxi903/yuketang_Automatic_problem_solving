@@ -196,10 +196,14 @@ async function rescan() {
   const t = store.task
   const active = !!t && ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED'].includes(t.status)
   if (!active) {
-    const finished = !!t && ['FAILED', 'CANCELLED', 'SUCCESS'].includes(t.status)
-    const id = finished ? await store.continueTask([]) : await store.startTask()
-    if (id) ElMessage.success('已生成新二维码，请扫码登录雨课堂')
-    qrVisible.value = true
+    // 标准出码路径：新会话 + 新任务（批次后置，登录成功后再确认批次）。
+    // 不走 continueTask——它在「批次未确认且无可匹配批次」时会直接放弃
+    // （答案库为空的冷启动场景必中），导致点了「重新获取」也不出新码。
+    const id = await store.startTask()
+    if (id) {
+      ElMessage.success('新任务已创建，请扫码登录雨课堂')
+      qrVisible.value = true
+    }
     return
   }
   await store.refreshSession()
