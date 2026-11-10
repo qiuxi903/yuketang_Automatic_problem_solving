@@ -182,21 +182,23 @@ class Worker:
         deadline = time.time() + config.LOGIN_TIMEOUT
         posted_at = 0.0
         shell_since = 0.0
+        shell_warned = False
         while time.time() < deadline:
             if self._abort.is_set():
                 raise AbortTask()
             if driver.is_logged_in():
                 return
-            # 兜底：页面已经是登录后的应用壳、且不显示登录页，但账号名读不到
-            # （个别账号/页面改版）——持续 12s 就按已登录继续，避免白等 3 分钟
+            # VIP fail-closed：页面已是登录后的应用壳但账号名读不到时**不再放行**
+            # （旧版 12s 兜底会绕过绑定校验）——持续等待直到超时，超时信息里写明原因
             if driver._app_shell_shown() and not driver._login_page_shown():
                 if shell_since == 0.0:
                     shell_since = time.time()
-                elif time.time() - shell_since >= 12:
-                    log.warning("[%s] 已登录应用壳但账号名读取失败，按已登录继续", self.name)
-                    return
+                if not shell_warned:
+                    log.warning("[%s] 已登录应用壳但账号名读不到，继续等待（VIP 绑定校验要求读到账号名）", self.name)
+                    shell_warned = True
             else:
                 shell_since = 0.0
+                shell_warned = False
             if time.time() - posted_at >= 12:
                 try:
                     qr = driver.capture_qrcode()
@@ -334,7 +336,21 @@ class Worker:
                         log.warning("[%s] %s", self.name, msg)
                         self.backend.post_progress(task_id, message=msg)
                         raise RuntimeError(msg)
-            self.backend.post_session_status(task_id, "SCANNED", ykt_name)
+            if not ykt_name:
+                # VIP fail-closed：读不到账号名就无法做绑定校验，明确终止而不是继续做题
+                msg = ("已登录但无法读取雨课堂账号名，VIP 绑定校验要求必须读到账号名；"
+                       "请重试一次，仍失败请联系管理员")
+                log.warning("[%s] %s", self.name, msg)
+                self.backend.post_session_status(task_id, "REJECTED")
+                self.backend.post_progress(task_id, message=msg)
+                raise RuntimeError(msg)
+            res = self.backend.post_session_status(task_id, "SCANNED", ykt_name)
+            # VIP 绑定校验：后端判定「账号与绑定不符 / 已被他人绑定」时返回 REJECTED，立即中止
+            if isinstance(res, dict) and res.get("sessionStatus") == "REJECTED":
+                reason = res.get("message") or "雨课堂账号与平台绑定不符，任务已中止"
+                log.warning("[%s] 绑定校验拒绝：%s", self.name, reason)
+                self.backend.post_progress(task_id, message=reason)
+                raise RuntimeError(reason)
             log.info("[%s] 扫码登录成功：%s", self.name, ykt_name)
             self._push_frame(driver, task_id, force=True)
 
@@ -446,7 +462,7 @@ class Worker:
                                  self.name, len(fresh), [e["name"] for e in fresh])
                         self.backend.post_progress(
                             task_id,
-                            message=f"检测到 {len(fresh)} 套新卷子（未入答案库），将一并作答并采集答案：{names}{more}")
+                            message=f"检测到 {len(fresh)} 套新卷子（未入答案库），将一并尝试作答：{names}{more}")
             if mode == "collect":
                 answered_cnt = len([p for p in plan if p.get("answered")])
                 log.info("[%s] 批次 %s 采集模式：待处理 %d 套，其中已交卷 %d 套（仅读结果页取答案）",
@@ -677,8 +693,14 @@ class Worker:
                              self.name, name, page_score)
                     self.backend.post_progress(
                         task_id, name, exam_id, status="COLLECTED",
-                        message="已经做过（雨课堂显示已交卷），不再重复作答；直接采集答案入库")
-                    self._stage(task_id, f"{name}：已经做过，采集答案入库", announce=False)
+                        message="已经做过（雨课堂显示已交卷）；不再重复作答")
+                    self._stage(task_id, f"{name}：已经做过", announce=False)
+                    if mode != "collect":
+                        # answer 模式：答案采集仅管理员（collect）进行，普通用户做题不采集
+                        log.info("[%s] %s 已交卷；答案采集仅管理员，跳过", self.name, name)
+                        self.backend.post_progress(task_id, name, exam_id,
+                                                   message="已交卷；答案采集仅管理员开放，普通用户做题不采集")
+                        return "skipped"
                     try:
                         ok = driver.open_result(exam_id, on_tick=tick)
                         if not ok and cid:
@@ -694,11 +716,10 @@ class Worker:
                     return "fetched" if got else "skipped"
                 # 0 分空白卷且库里也无答案 → 自动「再次答题」重做一遍：
                 # 交卷后的结果页会显示正确答案，采集入库（消耗 1 次作答机会）
-                log.info("[%s] %s 已交卷但 0 分（空白卷）：自动重做一遍以采集答案（消耗 1 次作答）",
-                         self.name, name)
+                log.info("[%s] %s 已交卷但 0 分（空白卷）：自动重做一遍争取得分", self.name, name)
                 self.backend.post_progress(
                     task_id, name, exam_id, status="ANSWERING",
-                    message="已交卷但 0 分（空白卷）：自动重做一遍，交卷后即可采集答案入库")
+                    message="已交卷但 0 分（空白卷）：自动重做一遍争取得分")
 
             if self._abort.is_set():
                 raise AbortTask()  # 用户已暂停/中断：不再进入答题页
@@ -727,10 +748,10 @@ class Worker:
                 # 新卷子（答案库没有该卷）：先跨卷同题匹配，剩余的交卷后采集入库
                 if cross:
                     msg = (f"新卷子：答案库其它试卷命中 {len(cross)}/{len(questions)} 题（同类题目复用），"
-                           "其余交卷后采集入库")
+                           "其余题将尝试兜底作答")
                 else:
-                    msg = (f"新卷子：答案库暂无该卷，{len(questions)} 题将尝试兜底 API"
-                           "（未配置则交卷后采集答案入库）")
+                    msg = (f"新卷子：答案库暂无该卷，{len(questions)} 题将尝试兜底 API 作答"
+                           "（未配置兜底时无法保证正确率）")
                 self.backend.post_progress(task_id, name, exam_id, message=msg)
             if built.get("lowConfidence"):
                 log.warning("[%s] %s 低置信题 %d 道", self.name, name, len(built["lowConfidence"]))
@@ -798,8 +819,10 @@ class Worker:
                                        score=score, status="SUBMITTED",
                                        message="已交卷 %s" % (score or ""))
 
-            self._stage(task_id, f"{name}：采集答案入库")
-            self._collect(driver, task_id, batch, name, exam_id, on_tick=tick)
+            # 答案采集仅在 collect 模式（管理员取答案）进行；answer 模式交卷拿分后不采集
+            if mode == "collect":
+                self._stage(task_id, f"{name}：采集答案入库")
+                self._collect(driver, task_id, batch, name, exam_id, on_tick=tick)
             self._sleep_frames(driver, task_id, config.PAPER_GAP)
             return True
         except (AbortTask, TaskGone):
