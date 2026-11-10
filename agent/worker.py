@@ -201,21 +201,27 @@ class Worker:
                 shell_since = 0.0
                 shell_warned = False
             # 登录页二维码约 2 分钟过期，且页面在后台浏览器里可能不自动换码——
-            # 每 ~90s 主动刷新登录页拿新码，保证回传的码始终可扫
+            # 每 ~90s 主动刷新登录页拿新码，保证回传的码始终可扫。
+            # 扫码/授权进行中（WS 帧活动 <15s）要避让：reload 会断开 WS，凭证推不到
+            # 手机端，会报「登录凭证获取失败」；最多推到 115s 强制（码 120s 过期前最后窗口）
             if time.time() - refreshed_at >= 90:
-                try:
-                    driver.page.reload(wait_until="domcontentloaded", timeout=20000)
-                    refreshed_at = time.time()
-                    shell_since = 0.0
-                    shell_warned = False
-                    driver.page.wait_for_timeout(2000)
-                    qr = driver.capture_qrcode()
-                    if qr:
-                        self.backend.post_qrcode(task_id, qr)
-                        posted_at = time.time()
-                        log.info("[%s] 登录页已刷新，新二维码已回传（旧码约 2 分钟过期）", self.name)
-                except Exception as exc:
-                    log.warning("[%s] 刷新登录页换码失败：%s", self.name, exc)
+                busy_ws = time.time() - driver.ws_last_frame() < 15
+                if busy_ws and time.time() - refreshed_at < 115:
+                    refreshed_at += 5  # 用户正在扫码/授权，推迟本次刷新
+                else:
+                    try:
+                        driver.page.reload(wait_until="domcontentloaded", timeout=20000)
+                        refreshed_at = time.time()
+                        shell_since = 0.0
+                        shell_warned = False
+                        driver.page.wait_for_timeout(2000)
+                        qr = driver.capture_qrcode()
+                        if qr:
+                            self.backend.post_qrcode(task_id, qr)
+                            posted_at = time.time()
+                            log.info("[%s] 登录页已刷新，新二维码已回传（旧码约 2 分钟过期）", self.name)
+                    except Exception as exc:
+                        log.warning("[%s] 刷新登录页换码失败：%s", self.name, exc)
             if time.time() - posted_at >= 12:
                 try:
                     qr = driver.capture_qrcode()
@@ -275,19 +281,23 @@ class Worker:
                     except Exception:
                         pass
                 return
-            # 同上：重扫等待期间每 ~90s 主动刷新登录页，避免回传的码过期
+            # 同上：重扫等待期间每 ~90s 主动刷新登录页（WS 帧活动时避让，见上）
             if time.time() - refreshed_at >= 90:
-                try:
-                    driver.page.reload(wait_until="domcontentloaded", timeout=20000)
-                    refreshed_at = time.time()
-                    driver.page.wait_for_timeout(2000)
-                    qr = driver.capture_qrcode()
-                    if qr:
-                        self.backend.post_qrcode(task_id, qr)
-                        posted_at = time.time()
-                        log.info("[%s] 重扫登录页已刷新，新二维码已回传", self.name)
-                except Exception as exc:
-                    log.warning("[%s] 重扫刷新登录页失败：%s", self.name, exc)
+                busy_ws = time.time() - driver.ws_last_frame() < 15
+                if busy_ws and time.time() - refreshed_at < 115:
+                    refreshed_at += 5  # 用户正在扫码/授权，推迟本次刷新
+                else:
+                    try:
+                        driver.page.reload(wait_until="domcontentloaded", timeout=20000)
+                        refreshed_at = time.time()
+                        driver.page.wait_for_timeout(2000)
+                        qr = driver.capture_qrcode()
+                        if qr:
+                            self.backend.post_qrcode(task_id, qr)
+                            posted_at = time.time()
+                            log.info("[%s] 重扫登录页已刷新，新二维码已回传", self.name)
+                    except Exception as exc:
+                        log.warning("[%s] 重扫刷新登录页失败：%s", self.name, exc)
             if time.time() - posted_at >= 12:
                 try:
                     qr = driver.capture_qrcode()
