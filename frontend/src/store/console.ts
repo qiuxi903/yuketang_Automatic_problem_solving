@@ -329,6 +329,22 @@ export const useConsoleStore = defineStore('console', () => {
     }
   }
 
+  /** 等待 Agent 回传新二维码：close 已清掉旧码，拉到「非空且不同于旧码」的图即新码，
+      更新 session 后弹窗自动显示；超时则由弹窗的 30s 无码报错兜底。 */
+  async function waitForNewQrcode(sid: number, oldQr: string | null, timeoutSec = 30) {
+    const deadline = Date.now() + timeoutSec * 1000
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 2000))
+      try {
+        const info = await getSession(sid)
+        session.value = info
+        if (info.qrcode && info.qrcode !== oldQr) return
+      } catch {
+        // 弱网单次失败继续等
+      }
+    }
+  }
+
   /* —— 批次后置：登录后确认批次 —— */
 
   async function loadBatchOptions() {
@@ -386,12 +402,16 @@ export const useConsoleStore = defineStore('console', () => {
     }
     busy.value = true
     try {
-      await closeSession(session.value.sessionId)
-      log('warn', '会话已关闭，回到扫码登录状态', `#${session.value.sessionId}`)
+      const sid = session.value.sessionId
+      const oldQr = session.value.qrcode
+      await closeSession(sid)
+      log('warn', '会话已关闭，正在生成新二维码…', `#${sid}`)
       ElMessage.success('会话已关闭')
+      // 乐观清掉弹窗里的死码：立即显示「生成中」而不是那张过期码（新 jar 的 close 也会清 qrcode）
+      session.value = { ...session.value, status: 'CLOSED', qrcode: null }
       await loadSession()
-      // 静默预拉一次：Agent（等待扫码中）的下一帧新码立即出现在弹窗里
-      await refreshSession(true)
+      // 等 Agent 换码循环的下一帧新码（≤12s），到了弹窗自动显示——无需再手动「重新获取」
+      await waitForNewQrcode(sid, oldQr, 30)
     } finally {
       busy.value = false
     }
