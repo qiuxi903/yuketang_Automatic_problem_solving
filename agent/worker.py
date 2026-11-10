@@ -1225,9 +1225,8 @@ class Dispatcher:
     def _adopt_orphans(self):
         """收养孤儿任务：上次 Agent 进程崩溃时正在执行的任务（RUNNING 但无人管）。"""
         try:
-            r = requests.get(self.base + "/api/agent/tasks/running", timeout=10)
-            r.raise_for_status()
-            tasks = r.json() or []
+            # 必须走带 X-Agent-Token 头的 client（裸 requests 会被 AgentTokenFilter 403）
+            tasks = self.backend.get_running_tasks() or []
         except Exception as exc:
             log.warning("收养孤儿任务失败（忽略）：%s", exc)
             return
