@@ -47,11 +47,18 @@ public class PaperController {
         return answerLibService.getAnswers(batch, paper, date);
     }
 
-    /** 把选定范围的答案导出为 Markdown 附件。 */
+    /** 把选定范围的答案导出为 Markdown 附件（仅管理员；普通用户只能在线查看）。 */
     @GetMapping("/export")
     public ResponseEntity<byte[]> export(@RequestParam(required = false) String batch,
                                          @RequestParam(required = false) String paper,
                                          @RequestParam(required = false) String date) {
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean isAdmin = auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        if (!isAdmin) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN, "该功能暂未开放");
+        }
         String markdown = answerLibService.exportMarkdown(batch, paper, date);
         byte[] body = markdown.getBytes(StandardCharsets.UTF_8);
         String ascii = "answers.md";
