@@ -49,6 +49,9 @@ public class SessionService {
     public OkResponse close(Long userId, Long id) {
         YktSession session = findOwned(userId, id);
         session.setStatus(SessionStatus.CLOSED);
+        // 旧码必须清掉：否则关闭后前端弹窗还显示那张过期码，用户得手动「重新获取」；
+        // 清空后任何新出现的码都是 Agent 之后回传的新图，前端轮询到非空即自动展示
+        session.setQrcode(null);
         sessionRepository.save(session);
         // P1：此处需通知 Agent 关闭对应浏览器上下文并清理 Redis 中的 Cookie
         return OkResponse.of();
