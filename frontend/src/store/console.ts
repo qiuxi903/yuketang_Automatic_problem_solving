@@ -263,7 +263,9 @@ export const useConsoleStore = defineStore('console', () => {
               info.status === 'SCANNED' && info.yktName ? `雨课堂账号 ${info.yktName}` : undefined)
           }
         }
-        if (info.status === 'WAITING_SCAN') return
+        // WAITING_SCAN 与 EXPIRED 都保持轮询：掉登录后 Agent 留守重扫中会持续换码，
+        // 前端轮询才拉得到新码（EXPIRED 停轮询会让弹窗永远显示进入瞬间的死码）
+        if (info.status === 'WAITING_SCAN' || info.status === 'EXPIRED') return
         stopPolling()
       } catch {
         // 单次请求失败（手机/内网穿透抖动）不能停止轮询——
@@ -311,7 +313,7 @@ export const useConsoleStore = defineStore('console', () => {
       // 拉取失败（弱网）不阻断任务绑定：轮询/手动刷新会再试
       return
     }
-    if (session.value.status === 'WAITING_SCAN') startPolling()
+    if (session.value.status === 'WAITING_SCAN' || session.value.status === 'EXPIRED') startPolling()
     else stopPolling()
   }
 
@@ -323,7 +325,7 @@ export const useConsoleStore = defineStore('console', () => {
       // Agent 在等扫码期间每 ~12s 回传新二维码，重拉会话即可拿到新图。
       // （此前新建会话是错的：任务仍绑旧会话，新会话成了孤儿，码永远没人扫。）
       await loadSession()
-      if (session.value?.status === 'WAITING_SCAN') startPolling()
+      if (session.value?.status === 'WAITING_SCAN' || session.value?.status === 'EXPIRED') startPolling()
       if (!quiet) {
         log('info', '已重新获取二维码', '若仍显示旧码，请稍等几秒再试（Agent 每 12 秒换新码）')
         ElMessage.success('二维码已刷新')

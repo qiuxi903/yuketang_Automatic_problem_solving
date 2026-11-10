@@ -26,6 +26,12 @@ function goAnswerCenter() {
 const form = ref<{ mode: TaskMode }>({ mode: 'answer' })
 
 const qrVisible = ref(false)
+// 死会话判定：会话已过期/关闭且没有活跃任务在出码——弹窗里的码是死的，扫码必失败
+const qrDead = computed(() => {
+  const st = store.session?.status
+  const active = !!store.task && ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED'].includes(store.task.status)
+  return (st === 'EXPIRED' || st === 'CLOSED') && !active
+})
 // 操作与事件不再常驻中栏，收进「运行日志」抽屉按需查看
 const logVisible = ref(false)
 const lastSeen = ref(0)
@@ -183,8 +189,19 @@ async function start() {
   }
 }
 
-/** 切换雨课堂账号：新建任务并强制重新扫码（Agent 会清空当前登录态，不复用上一个人的账号）。 */
+/** 重新获取二维码：任务活跃时刷新当前码（Agent 换码循环在跑，重拉即得新图）；
+    任务已结束/无任务时「重新获取」只会反复拉回同一张死码——直接发起续做或新任务，
+    让 Agent 生成新会话和新码（1:1 绑定不变，重扫仍是原雨课堂账号）。 */
 async function rescan() {
+  const t = store.task
+  const active = !!t && ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED'].includes(t.status)
+  if (!active) {
+    const finished = !!t && ['FAILED', 'CANCELLED', 'SUCCESS'].includes(t.status)
+    const id = finished ? await store.continueTask([]) : await store.startTask()
+    if (id) ElMessage.success('已生成新二维码，请扫码登录雨课堂')
+    qrVisible.value = true
+    return
+  }
   await store.refreshSession()
   qrVisible.value = true
 }
@@ -442,6 +459,9 @@ defineExpose({
         <p v-if="!store.session?.qrcode && (qrWaitSec === null || qrWaitSec < 30)" class="qr-tip qr-tip-warn">
           二维码生成中…如果任务在排队（同时做题的人较多），等前面的任务完成会自动出码；
           超过 1 分钟仍没有，点下方「重新获取二维码」，或请管理员确认 Agent 正在运行。
+        </p>
+        <p v-if="qrDead" class="qr-tip qr-tip-warn">
+          当前会话已结束，这个二维码已失效。点下方「重新获取二维码」会自动开一个新任务并生成新码。
         </p>
       </div>
 
