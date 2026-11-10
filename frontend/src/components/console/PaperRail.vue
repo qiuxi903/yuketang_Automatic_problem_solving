@@ -22,8 +22,18 @@ const ANSWER_LABEL: Record<string, string> = { answer: '做这些卷子', collec
 
 const store = useConsoleStore()
 
-const total = computed(() => store.resultRows.length)
-const doneCount = computed(() => store.doneRows.length)
+/** 当前可视卷子：选了日期后=那一天的卷子；未选=全部。「全选/计数」都以可视范围为准。 */
+const visibleRows = computed(() => {
+  const opt = waitingBatch.value && store.selectedBatch
+    ? store.batchOptions?.options.find((o) => o.batch === store.selectedBatch)
+    : null
+  if (!opt) return store.resultRows
+  const allow = new Set([...opt.matchedPapers, ...opt.missedPapers])
+  return store.resultRows.filter((r) => allow.has(r.name))
+})
+
+const total = computed(() => visibleRows.value.length)
+const doneCount = computed(() => visibleRows.value.filter((r) => r.done).length)
 
 interface DateGroup {
   date: string
@@ -34,14 +44,8 @@ interface DateGroup {
 const expandedDates = ref<string[]>([])
 
 const dateGroups = computed<DateGroup[]>(() => {
-  // 选了日期后只展示那一天的卷子（做题必须先选日期，默认做该日期全部、可单独勾选）
-  const opt = waitingBatch.value && store.selectedBatch
-    ? store.batchOptions?.options.find((o) => o.batch === store.selectedBatch)
-    : null
-  const allow = opt ? new Set([...opt.matchedPapers, ...opt.missedPapers]) : null
   const map = new Map<string, typeof store.resultRows>()
-  for (const row of store.resultRows) {
-    if (allow && !allow.has(row.name)) continue
+  for (const row of visibleRows.value) {
     const date = store.paperDateOf(row.name)
     const list = map.get(date) ?? []
     list.push(row)
@@ -91,12 +95,26 @@ function groupAllChecked(date: string) {
 }
 
 const allChecked = computed(
-  () => total.value > 0 && store.selectedPapers.length === total.value,
+  () =>
+    visibleRows.value.length > 0 &&
+    visibleRows.value.every((r) => store.selectedPapers.includes(r.name)),
 )
 
 function toggleAll() {
-  store.selectedPapers = allChecked.value ? [] : store.resultRows.map((r) => r.name)
+  // 全选/取消只作用于当前可视范围（选了日期=那一天；未选=全部）
+  const names = visibleRows.value.map((r) => r.name)
+  store.selectedPapers = allChecked.value
+    ? store.selectedPapers.filter((n) => !names.includes(n))
+    : [...new Set([...store.selectedPapers, ...names])]
 }
+
+// 选定日期后默认全选该日期的卷子（默认做这天全部，用户可单独取消部分）
+watch(
+  () => store.selectedBatch,
+  (b) => {
+    if (waitingBatch.value && b) store.selectedPapers = visibleRows.value.map((r) => r.name)
+  },
+)
 
 /** 勾选即开干：点击直接为勾选的卷子发起任务（自动确认推荐批次、沿用登录、免二级菜单）。 */
 async function startChecked(mode: TaskMode) {
