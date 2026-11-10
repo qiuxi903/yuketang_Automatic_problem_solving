@@ -31,7 +31,6 @@ async function loadMonthDays() {
 }
 
 onMounted(() => {
-  void consoleStore.loadMyTasks()
   void loadMonthDays()
 })
 
@@ -552,6 +551,4 @@ function handleLogout() {
     border: 1.5px solid var(--accent);
   }
 }
-
-/* —— 我的任务抽屉 —— */
 </style>
