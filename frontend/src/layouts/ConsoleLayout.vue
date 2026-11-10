@@ -14,19 +14,26 @@ const auth = useAuthStore()
 const consoleStore = useConsoleStore()
 const theme = useTheme()
 
-// 月卡到期提醒：在期且剩 ≤7 天时顶栏亮徽章（点击进 VIP 页续费）
+// 月卡到期展示：在期就在顶栏常显「到期日 + 剩余天数」（≤3 天转红色强化提醒）
 const monthDaysLeft = ref<number | null>(null)
+const monthExpiresLabel = ref('')
 
 async function loadMonthDays() {
   if (!auth.isLogin) return
   try {
     const s = await getVipStatus()
-    monthDaysLeft.value =
-      s.monthCardActive && s.monthCardExpiresAt
-        ? Math.max(0, Math.ceil((new Date(s.monthCardExpiresAt).getTime() - Date.now()) / 86400000))
-        : null
+    if (s.monthCardActive && s.monthCardExpiresAt) {
+      const ms = new Date(s.monthCardExpiresAt).getTime()
+      monthDaysLeft.value = Math.max(0, Math.ceil((ms - Date.now()) / 86400000))
+      const d = new Date(s.monthCardExpiresAt)
+      monthExpiresLabel.value = `${d.getMonth() + 1}月${d.getDate()}日`
+    } else {
+      monthDaysLeft.value = null
+      monthExpiresLabel.value = ''
+    }
   } catch {
     monthDaysLeft.value = null
+    monthExpiresLabel.value = ''
   }
 }
 
@@ -112,14 +119,16 @@ function handleLogout() {
         </button>
 
         <button
-          v-if="monthDaysLeft !== null && monthDaysLeft <= 7"
+          v-if="monthDaysLeft !== null"
           class="month-pill"
+          :class="{ soon: monthDaysLeft <= 3 }"
           type="button"
-          title="月卡即将到期，续费自动顺延"
+          title="月卡会员：到期后按日解锁做题，续费自动顺延"
           @click="goVip"
         >
           <el-icon><Coin /></el-icon>
-          <span>月卡剩 {{ monthDaysLeft }} 天</span>
+          <span class="mobile-hide">{{ monthExpiresLabel }}到期</span>
+          <span>剩 {{ monthDaysLeft }} 天</span>
         </button>
 
         <button class="vip-entry" type="button" title="VIP 会员中心" @click="goVip">
@@ -369,6 +378,15 @@ function handleLogout() {
 .month-pill:hover {
   color: #fff;
   background: var(--amber);
+}
+.month-pill.soon {
+  border-color: #dc2626;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.08);
+}
+.month-pill.soon:hover {
+  color: #fff;
+  background: #dc2626;
 }
 
 /* —— VIP 入口：琥珀金小徽章 —— */
