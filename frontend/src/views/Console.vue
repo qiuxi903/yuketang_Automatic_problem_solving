@@ -45,8 +45,10 @@ const step = computed(() => {
       return 2 // 扫完码：直接落到「勾选卷子」
     case 'RUNNING':
     case 'PAUSED':
+      // 批次未确认（扫码后等选日期）→ 停在「勾选卷子」；确认批次后才进「自动做题」。
       // 任务一创建后端就置 RUNNING（Agent 正在开浏览器等你扫码），
       // 此时还没登录 → 仍停在「扫码登录」，别把用户甩到做题页
+      if (!store.task?.batch) return 2
       return store.loggedIn ? 3 : 1
     default:
       return 1 // PENDING / 等待扫码
