@@ -699,7 +699,7 @@ class Worker:
                         # answer 模式：答案采集仅管理员（collect）进行，普通用户做题不采集
                         log.info("[%s] %s 已交卷；答案采集仅管理员，跳过", self.name, name)
                         self.backend.post_progress(task_id, name, exam_id,
-                                                   message="已交卷；答案采集仅管理员开放，普通用户做题不采集")
+                                                   message="已交卷")
                         return "skipped"
                     try:
                         ok = driver.open_result(exam_id, on_tick=tick)
