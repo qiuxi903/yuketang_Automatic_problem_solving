@@ -52,7 +52,7 @@ class BackendClient:
         r.raise_for_status()
         return r.json()
 
-    def post_progress(self, task_id, paper, exam_id=None, seq=None, total=None,
+    def post_progress(self, task_id, paper=None, exam_id=None, seq=None, total=None,
                       score=None, status=None, message=None):
         with _write_lock:
             return self._post(task_id, "progress", {
