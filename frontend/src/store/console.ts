@@ -267,7 +267,37 @@ export const useConsoleStore = defineStore('console', () => {
     }, 1000)
   }
 
+  /* —— 登录态巡查：任务活跃期间每 15s 对齐一次会话状态 ——
+     掉登录时 Agent 上报 EXPIRED 并留守等待重扫（持续回传新码），前端据此自动弹出扫码窗；
+     重新扫码成功（EXPIRED → SCANNED）记录恢复。闲置（无任务/终态）时零请求。 */
+  let watchTimer: number | undefined
+
+  function startSessionWatch() {
+    if (watchTimer) return
+    watchTimer = window.setInterval(async () => {
+      const active = ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED'].includes(
+        task.value?.status ?? '',
+      )
+      if (!session.value || !active) return
+      try {
+        const info = await getSession(session.value.sessionId)
+        const previous = session.value.status
+        session.value = info
+        if (info.status !== previous) {
+          if (info.status === 'EXPIRED') {
+            log('danger', '登录已过期，正在等待重新扫码…', '扫码窗会自动弹出，扫码后继续做题')
+          } else if (info.status === 'SCANNED' && previous === 'EXPIRED') {
+            log('ok', '重新扫码成功，继续做题')
+          }
+        }
+      } catch {
+        // 弱网单次失败忽略，下一轮再对齐
+      }
+    }, 15000)
+  }
+
   async function loadSession() {
+    startSessionWatch()
     const current = task.value
     if (!current?.sessionId) return
     try {
@@ -280,7 +310,7 @@ export const useConsoleStore = defineStore('console', () => {
     else stopPolling()
   }
 
-  async function refreshSession() {
+  async function refreshSession(quiet = false) {
     const current = task.value
     if (!current) return
     busy.value = true
@@ -289,8 +319,10 @@ export const useConsoleStore = defineStore('console', () => {
       // （此前新建会话是错的：任务仍绑旧会话，新会话成了孤儿，码永远没人扫。）
       await loadSession()
       if (session.value?.status === 'WAITING_SCAN') startPolling()
-      log('info', '已重新获取二维码', '若仍显示旧码，请稍等几秒再试（Agent 每 12 秒换新码）')
-      ElMessage.success('二维码已刷新')
+      if (!quiet) {
+        log('info', '已重新获取二维码', '若仍显示旧码，请稍等几秒再试（Agent 每 12 秒换新码）')
+        ElMessage.success('二维码已刷新')
+      }
     } finally {
       busy.value = false
     }
@@ -345,20 +377,26 @@ export const useConsoleStore = defineStore('console', () => {
       return
     }
     try {
-      await ElMessageBox.confirm('关闭后本次扫码失效，需要重新获取二维码。确认关闭当前会话？', '关闭会话', {
-        confirmButtonText: '关闭会话',
-        cancelButtonText: '取消',
-        type: 'warning',
-      })
+      await ElMessageBox.confirm(
+        '关闭后当前登录作废，回到扫码登录状态。确认关闭？',
+        '关闭会话',
+        {
+          confirmButtonText: '关闭会话',
+          cancelButtonText: '取消',
+          type: 'warning',
+        },
+      )
     } catch {
       return // 取消
     }
     busy.value = true
     try {
       await closeSession(session.value.sessionId)
-      log('warn', '会话已关闭', `#${session.value.sessionId}`)
+      log('warn', '会话已关闭，回到扫码登录状态', `#${session.value.sessionId}`)
       ElMessage.success('会话已关闭')
       await loadSession()
+      // 静默预拉一次：Agent（等待扫码中）的下一帧新码立即出现在弹窗里
+      await refreshSession(true)
     } finally {
       busy.value = false
     }
