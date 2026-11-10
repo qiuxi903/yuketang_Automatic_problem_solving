@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleClose, Collection, Document, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
 import { useAuthStore } from '@/store/auth'
+import { getVipStatus, type VipStatus } from '@/api/vip'
 
 const auth = useAuthStore()
 import { countdown, formatClock } from '@/utils/format'
@@ -32,6 +33,19 @@ const qrDead = computed(() => {
   const active = !!store.task && ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED'].includes(store.task.status)
   return (st === 'EXPIRED' || st === 'CLOSED') && !active
 })
+
+// VIP 解锁状态：批次列表展示「已解锁 / 未解锁 / 月卡可做」——用户选日期时付不付一目了然
+const vipStatus = ref<VipStatus | null>(null)
+onMounted(() => {
+  getVipStatus().then((v) => (vipStatus.value = v)).catch(() => (vipStatus.value = null))
+})
+function unlockBadge(batch: string): { text: string; ok: boolean } | null {
+  const v = vipStatus.value
+  if (!v) return null
+  if (v.monthCardActive) return { text: '月卡可做', ok: true }
+  const ok = v.unlockedBatches.includes(batch)
+  return { text: ok ? '已解锁' : '未解锁', ok }
+}
 // 操作与事件不再常驻中栏，收进「运行日志」抽屉按需查看
 const logVisible = ref(false)
 const lastSeen = ref(0)
@@ -359,7 +373,11 @@ defineExpose({
               role="button"
               @click="store.selectedBatch = opt.batch"
             >
-              <span class="b-name">{{ opt.batch }}</span>
+              <span class="b-name">{{ opt.batch }}<span
+                v-if="unlockBadge(opt.batch)"
+                class="unlock-badge"
+                :class="{ ok: unlockBadge(opt.batch)?.ok }"
+              >{{ unlockBadge(opt.batch)?.text }}</span></span>
               <span class="b-meta">匹配 {{ opt.percent }}%</span>
               <span class="b-meta">{{ opt.total }} 套</span>
             </div>
@@ -892,6 +910,22 @@ defineExpose({
   font-size: 11.5px;
   color: var(--ink-500);
   text-align: right;
+}
+.unlock-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--amber, #b45309);
+  background: rgba(180, 83, 9, 0.10);
+  vertical-align: 1px;
+}
+.unlock-badge.ok {
+  color: #15803d;
+  background: rgba(21, 128, 61, 0.10);
 }
 .b-name {
   font-family: var(--font-mono);
