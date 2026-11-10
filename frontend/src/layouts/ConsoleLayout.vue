@@ -6,7 +6,6 @@ import { useAuthStore } from '@/store/auth'
 import { useConsoleStore } from '@/store/console'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import { toggleTheme, useTheme } from '@/utils/theme'
-import { getVipStatus } from '@/api/vip'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,25 +13,8 @@ const auth = useAuthStore()
 const consoleStore = useConsoleStore()
 const theme = useTheme()
 
-// 月卡到期提醒：在期且剩 ≤7 天时顶栏亮徽章（点击进 VIP 页续费）
-const monthDaysLeft = ref<number | null>(null)
-
-async function loadMonthDays() {
-  if (!auth.isLogin) return
-  try {
-    const s = await getVipStatus()
-    monthDaysLeft.value =
-      s.monthCardActive && s.monthCardExpiresAt
-        ? Math.max(0, Math.ceil((new Date(s.monthCardExpiresAt).getTime() - Date.now()) / 86400000))
-        : null
-  } catch {
-    monthDaysLeft.value = null
-  }
-}
-
 onMounted(() => {
   void consoleStore.loadMyTasks()
-  void loadMonthDays()
 })
 
 const navItems = computed(() => {
@@ -112,16 +94,6 @@ function handleLogout() {
           <el-icon><Sunny v-if="theme === 'dark'" /><Moon v-else /></el-icon>
         </button>
 
-        <button
-          v-if="monthDaysLeft !== null && monthDaysLeft <= 7"
-          class="month-pill"
-          type="button"
-          title="月卡即将到期，续费自动顺延"
-          @click="goVip"
-        >
-          <el-icon><Coin /></el-icon>
-          <span>月卡剩 {{ monthDaysLeft }} 天</span>
-        </button>
 
         <button class="vip-entry" type="button" title="VIP 会员中心" @click="goVip">
           <el-icon><Coin /></el-icon>
@@ -351,26 +323,6 @@ function handleLogout() {
 
 
 /* —— 月卡到期徽章 —— */
-.month-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 34px;
-  padding: 0 10px;
-  border: 1px solid var(--amber);
-  border-radius: 99px;
-  background: var(--amber-050);
-  color: var(--amber);
-  font-family: var(--font-sans);
-  font-size: 12.5px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease;
-}
-.month-pill:hover {
-  color: #fff;
-  background: var(--amber);
-}
 
 /* —— VIP 入口：琥珀金小徽章 —— */
 .vip-entry {
@@ -477,9 +429,6 @@ function handleLogout() {
   .vip-entry {
     height: 38px;
     padding: 0 11px;
-  }
-  .month-pill {
-    height: 38px;
   }
   .mobile-hide {
     display: none;
