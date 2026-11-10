@@ -244,7 +244,11 @@ class Worker:
         重新登录成功 → 上报 SCANNED → 继续做剩余卷子（同账号续做，已完成的不重做）；
         等待超时 → LoginRequired，任务如实失败（「重新扫码超时」）。
         """
-        if driver.is_logged_in():
+        # 中途检查只认「被踢到登录页」这一明确信号（URL 带 next=/login 或登录二维码）：
+        # 考试页/结果页没有主壳与账号名节点，is_logged_in 的严格判定会误报掉登录，
+        # 把正常做题的任务带进「等待重扫」白卡 10 分钟。
+        # 真正的漏检（操作静默失败）由 _answer_one 的 failed 标记兜底，不会卡死。
+        if not driver._login_page_shown():
             return
         wait = wait_seconds or config.RELOGIN_WAIT_TIMEOUT
         deadline = time.time() + wait
