@@ -66,12 +66,6 @@ export const useConsoleStore = defineStore('console', () => {
   const starting = ref(false)
   const busy = ref(false)
   const batchOptions = ref<BatchOptions | null>(null)
-  /** 全自动模式：扫码成功后自动匹配卷子并直接开始做题（默认开，关闭则回到手动勾选流程） */
-  const autoPilot = ref(localStorage.getItem('ykt_autopilot') !== '0')
-  function setAutoPilot(v: boolean) {
-    autoPilot.value = v
-    localStorage.setItem('ykt_autopilot', v ? '1' : '0')
-  }
   const selectedBatch = ref('')
   const batchLoading = ref(false)
   // 浏览器模式：Agent 回传的最近一帧雨课堂实时页面
@@ -343,12 +337,6 @@ export const useConsoleStore = defineStore('console', () => {
         selectedBatch.value = options.recommended ?? options.options[0]?.batch ?? ''
       }
       log('info', '已获取账号作业清单', `${options.papers.length} 套作业，${options.options.length} 个候选批次`)
-      // 全自动模式：自动确认推荐批次并直接开始做题（用户无需手动勾选）
-      if (autoPilot.value && task.value?.status === 'WAITING_BATCH' && options.recommended) {
-        log('info', '全自动模式：正在自动匹配要做的卷子…')
-        await confirmBatch(options.recommended, 'answer')
-        return
-      }
     } catch {
       batchOptions.value = null
     } finally {
@@ -872,8 +860,6 @@ export const useConsoleStore = defineStore('console', () => {
     starting,
     busy,
     batchOptions,
-    autoPilot,
-    setAutoPilot,
     selectedBatch,
     batchLoading,
     frame,
