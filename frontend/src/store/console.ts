@@ -410,8 +410,9 @@ export const useConsoleStore = defineStore('console', () => {
       // 乐观清掉弹窗里的死码：立即显示「生成中」而不是那张过期码（新 jar 的 close 也会清 qrcode）
       session.value = { ...session.value, status: 'CLOSED', qrcode: null }
       await loadSession()
-      // 等 Agent 换码循环的下一帧新码（≤12s），到了弹窗自动显示——无需再手动「重新获取」
-      await waitForNewQrcode(sid, oldQr, 30)
+      // 后台等 Agent 换码循环的下一帧新码（≤12s）到了自动显示；不 await——
+      // 关闭动作立即完成、弹窗立即打开（终态任务没有循环在换码，死等 30s 只会让按钮一直转圈）
+      void waitForNewQrcode(sid, oldQr, 30)
     } finally {
       busy.value = false
     }
