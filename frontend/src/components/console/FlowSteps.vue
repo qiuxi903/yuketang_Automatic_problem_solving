@@ -44,6 +44,14 @@ const index = computed(() => {
   return 0
 })
 
+/** 各步提示：扫码成功、清单还在抓取时，第 2 步实时显示「正在读取」。 */
+const hints = computed(() => {
+  const t = store.task
+  const list = STEPS.map((s) => s.hint)
+  if (t && t.status === 'RUNNING' && store.loggedIn && !t.batch) list[1] = '正在读取账号作业清单…'
+  return list
+})
+
 /** 终态（失败/中断）时第五步显示原因而不是「查看结果」。 */
 const lastTitle = computed(() => {
   const status = store.task?.status
@@ -75,7 +83,7 @@ const tones = computed<StepTone[]>(() =>
         </span>
         <span class="flow-text">
           <b>{{ i === 4 ? lastTitle : step.title }}</b>
-          <em>{{ step.hint }}</em>
+          <em>{{ hints[i] }}</em>
         </span>
       </div>
     </template>
