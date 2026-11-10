@@ -180,7 +180,7 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
           </div>
           <div class="done-actions">
             <el-button
-              type="warning"
+              type="primary"
               @click="store.endTaskGoHome()"
             >
               结束任务，回到主页

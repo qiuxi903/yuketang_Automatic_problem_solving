@@ -930,8 +930,8 @@ defineExpose({
   font-size: 10.5px;
   font-weight: 600;
   line-height: 1.5;
-  color: var(--amber, #b45309);
-  background: rgba(180, 83, 9, 0.10);
+  color: var(--accent);
+  background: var(--accent-050);
   vertical-align: 1px;
 }
 .unlock-badge.ok {

@@ -354,9 +354,7 @@ export const useConsoleStore = defineStore('console', () => {
     try {
       const options = await getBatchOptions(current.taskId)
       batchOptions.value = options
-      if (!selectedBatch.value) {
-        selectedBatch.value = options.recommended ?? options.options[0]?.batch ?? ''
-      }
+      // 日期必须由用户显式点选：做题先选日期，绝不默认替用户选（防做错日期）
       log('info', '已获取账号作业清单', `${options.papers.length} 套作业，${options.options.length} 个候选批次`)
     } catch {
       batchOptions.value = null
@@ -670,12 +668,17 @@ export const useConsoleStore = defineStore('console', () => {
       // 2) 批次：已确认 → 新建勾选任务；未确认（刚扫码）→ 确认推荐批次
       const t = task.value
       const waitingConfirm = !t || t.status === 'WAITING_BATCH' || !t.batch
-      const options = batchOptions.value?.options ?? []
-      const best = batchOptions.value?.recommended ?? options[0]?.batch ?? ''
 
       if (waitingConfirm) {
-        if (!best) {
+        // 日期必须由用户显式勾选——不自动取推荐批次（防做错日期）
+        const opts = batchOptions.value?.options ?? []
+        if (!opts.length) {
           ElMessage.warning('没有答案库批次能覆盖当前账号作业，请联系管理员补充答案库')
+          return null
+        }
+        const best = selectedBatch.value
+        if (!best) {
+          ElMessage.warning('请先在「勾选日期」里点选一个要做的日期，再开始做题')
           return null
         }
         const tid = t?.taskId ?? activeTaskId.value

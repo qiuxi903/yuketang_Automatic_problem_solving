@@ -166,7 +166,7 @@ onMounted(async () => {
           :loading="store.starting"
           @click="startChecked('answer')"
         >
-          {{ store.selectedPapers.length ? `开始做题（${store.selectedPapers.length} 卷）` : '做全部作业' }}
+          {{ store.selectedPapers.length ? `开始做题（${store.selectedPapers.length} 卷）` : '做这天的全部卷子' }}
         </el-button>
         <el-button
           v-if="auth.isAdmin"
