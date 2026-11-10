@@ -1,18 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleClose,
-  Collection,
-  Document,
-  Download,
-  Promotion,
-  Refresh,
-  Select,
-  SwitchButton,
-  VideoPause,
-  VideoPlay,
-  WarningFilled,
-} from '@element-plus/icons-vue'
+import { CircleClose, Collection, Document, Download, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
 import { useAuthStore } from '@/store/auth'
 
@@ -190,20 +179,6 @@ async function start() {
 }
 
 /** 切换雨课堂账号：新建任务并强制重新扫码（Agent 会清空当前登录态，不复用上一个人的账号）。 */
-async function switchAccount() {
-  try {
-    await ElMessageBox.confirm(
-      '将新建一个任务并重新扫码登录：Agent 会清空浏览器里当前的登录态，用新账号扫码即可。' +
-        '（若当前任务还在执行，请先中断它）',
-      '切换雨课堂账号',
-      { confirmButtonText: '重新扫码', cancelButtonText: '取消', type: 'warning' },
-    )
-  } catch {
-    return
-  }
-  await start()
-}
-
 async function rescan() {
   await store.refreshSession()
   qrVisible.value = true
@@ -306,13 +281,7 @@ defineExpose({
         >
           新建任务，扫码登录雨课堂
         </el-button>
-        <el-button class="full" :icon="SwitchButton" :loading="store.starting" @click="switchAccount">
-          切换账号（重新扫码）
-        </el-button>
-        <p class="hint">
-          浏览器里还登着别人的雨课堂账号？先点「切换账号」：会清空登录态并弹二维码，
-          不会自动登录上一个人。
-        </p>
+
         <!-- 答案查询统一入口：答案中心页（搜索/浏览/导出/获取记录），不再单独弹窗 -->
         <div class="menu-group mobile-hide">
           <span class="eyebrow">不动手做，只想查答案？</span>
@@ -420,10 +389,7 @@ defineExpose({
         <!-- 换号放在扫码/会话之前：要换账号时先看到它，避免直接点开始被自动登录成上一个人 -->
         <div class="menu-group">
           <span class="eyebrow">换号 / 重新扫码</span>
-          <el-button class="full" :icon="SwitchButton" :loading="store.starting" @click="switchAccount">
-            切换账号（重新扫码）
-          </el-button>
-          <p class="hint">
+            <p class="hint">
             要换雨课堂账号时点这里：Agent 会清空当前登录态并弹二维码，不会沿用上一个人的账号。
           </p>
         </div>
