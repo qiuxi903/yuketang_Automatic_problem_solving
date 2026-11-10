@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleClose, Collection, Document, Download, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
+import { CircleClose, Collection, Document, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
 import { useAuthStore } from '@/store/auth'
 
@@ -48,7 +48,6 @@ const sessionStatus = computed(() =>
 )
 const taskStatusMeta = computed(() => (store.task ? taskMeta(store.task.status) : null))
 const remain = computed(() => countdown(store.session?.expireAt, now.value))
-const canExport = computed(() => (store.task?.donePaper ?? 0) > 0)
 const batchCandidates = computed(() => store.batchOptions?.options ?? [])
 // 账号已交卷的套数：这些卷子「只取答案」也能直接拿到；未交卷的只能先做题
 const submittedCount = computed(
@@ -87,14 +86,18 @@ watch(qrVisible, (open) => {
   if (open) void store.loadSession()
 })
 
-// 扫码成功后自动关闭扫码弹窗，无需手动点「关闭」
+// 扫码成功后自动关闭扫码弹窗，无需手动点「关闭」；
+// 掉登录（Agent 留守等重扫）自动弹出扫码窗并拉新码——用户直接扫，无需找按钮
 watch(
   () => store.session?.status,
-  (status) => {
+  async (status, prev) => {
     if (status === 'SCANNED' && qrVisible.value) {
       qrVisible.value = false
       lastSeen.value = store.events.length
       ElMessage.success('扫码成功！请勾选要做的卷子，再点下方「开始做题」')
+    } else if (status === 'EXPIRED' && prev && prev !== 'EXPIRED') {
+      await store.refreshSession(true)
+      qrVisible.value = true
     }
   },
 )
@@ -183,6 +186,12 @@ async function start() {
 /** 切换雨课堂账号：新建任务并强制重新扫码（Agent 会清空当前登录态，不复用上一个人的账号）。 */
 async function rescan() {
   await store.refreshSession()
+  qrVisible.value = true
+}
+
+/** 关闭会话后回到扫码登录状态：自动弹出扫码窗，Agent 下一帧新码立即可见（雨课堂账号绑定不变）。 */
+async function closeSessionAndRescan() {
+  await store.closeActiveSession()
   qrVisible.value = true
 }
 
@@ -363,15 +372,6 @@ defineExpose({
           >
             继续作答或重做（沿用当前账号）
           </el-button>
-          <el-button
-            class="full"
-            :icon="Download"
-            :disabled="!canExport"
-            :loading="store.busy"
-            @click="store.exportAnswers()"
-          >
-            导出任务答案
-          </el-button>
           <el-button class="full mobile-hide" :icon="Collection" @click="goAnswerCenter">
             前往答案中心
           </el-button>
@@ -399,10 +399,10 @@ defineExpose({
               重新获取二维码
             </el-button>
           </div>
-          <el-button class="full" :icon="CircleClose" :disabled="!store.session" @click="store.closeActiveSession()">
-            关闭会话（二维码作废）
+          <el-button class="full" :icon="CircleClose" :disabled="!store.session" @click="closeSessionAndRescan()">
+            关闭会话，回到扫码登录
           </el-button>
-          <p class="hint">二维码过期时点「重新获取二维码」；会话关闭后需重新扫码。</p>
+          <p class="hint">扫码遇到问题点「重新获取二维码」换一张；登录过期会自动弹出扫码窗，扫码后接着做。</p>
         </div>
 
         <button class="ghost-link mobile-hide" type="button" @click="copyToken">复制任务信息（排查用）</button>

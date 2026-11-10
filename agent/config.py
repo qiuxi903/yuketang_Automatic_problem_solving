@@ -34,6 +34,9 @@ WORKER_COUNT = int(os.environ.get("AGENT_WORKER_COUNT", "3"))
 PAPER_GAP = float(os.environ.get("AGENT_PAPER_GAP", "0.8"))
 LOGIN_TIMEOUT = int(os.environ.get("AGENT_LOGIN_TIMEOUT", "180"))
 
+# 掉登录后留守等待重新扫码的时长（秒）：期间持续回传新二维码，前端自动弹出扫码窗
+RELOGIN_WAIT_TIMEOUT = int(os.environ.get("AGENT_RELOGIN_WAIT", "600"))
+
 # 批次后置：登录并回传账号作业清单后，等待用户确认批次的最长秒数
 BATCH_WAIT_TIMEOUT = float(os.environ.get("AGENT_BATCH_WAIT_TIMEOUT", "600"))
 

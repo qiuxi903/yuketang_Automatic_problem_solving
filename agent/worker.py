@@ -210,6 +210,61 @@ class Worker:
             driver.page.wait_for_timeout(1500)
         raise LoginRequired("扫码登录超时")
 
+    def _ensure_login_or_wait(self, driver, task_id, wait_seconds=None):
+        """每套卷子处理前的登录态检查：掉登录不再直接判失败，留守等待重新扫码。
+
+        登录过期 → 上报 EXPIRED（前端检测到会自动弹出扫码窗）→ 进入重扫等待循环，
+        期间每 ~12s 重截登录页二维码回传（雨课堂码约 2 分钟过期，与 _wait_login_with_qr 同策略）；
+        重新登录成功 → 上报 SCANNED（VIP 绑定校验在此复检：换号会被拒绝并中止）→ 继续做剩余卷子；
+        等待超时 → LoginRequired，任务如实失败（「重新扫码超时」）。
+        """
+        if driver.is_logged_in():
+            return
+        wait = wait_seconds or config.RELOGIN_WAIT_TIMEOUT
+        deadline = time.time() + wait
+        log.warning("[%s] 任务 #%s 登录态失效，等待重新扫码（最多 %d 秒）", self.name, task_id, wait)
+        try:
+            self.backend.post_session_status(task_id, "EXPIRED")
+            self.backend.post_progress(
+                task_id,
+                message="登录已过期：正在等待重新扫码，新二维码已放到扫码窗，扫码后自动继续做题",
+            )
+        except Exception:
+            pass
+        posted_at = 0.0
+        while time.time() < deadline:
+            if self._abort.is_set():
+                raise AbortTask()
+            if driver.is_logged_in():
+                name = driver.ykt_name()
+                if name:
+                    self.ykt_name = name
+                    res = self.backend.post_session_status(task_id, "SCANNED", name)
+                    if isinstance(res, dict) and res.get("sessionStatus") == "REJECTED":
+                        reason = res.get("message") or "重新扫码的账号与平台绑定不符，任务已中止"
+                        log.warning("[%s] %s", self.name, reason)
+                        try:
+                            self.backend.post_progress(task_id, message=reason)
+                        except Exception:
+                            pass
+                        raise RuntimeError(reason)
+                    log.info("[%s] 重新扫码成功：%s，继续做题", self.name, name)
+                    try:
+                        self.backend.post_progress(task_id, message="重新扫码成功，继续做题")
+                    except Exception:
+                        pass
+                return
+            if time.time() - posted_at >= 12:
+                try:
+                    qr = driver.capture_qrcode()
+                    if qr:
+                        self.backend.post_qrcode(task_id, qr)
+                        posted_at = time.time()
+                except Exception:
+                    pass
+            driver.page.wait_for_timeout(1500)
+        raise LoginRequired("重新扫码超时（登录已过期，未在限时内重新扫码）")
+
     def _ensure_driver(self):
         if self.driver is not None:
             return self.driver
@@ -478,6 +533,9 @@ class Worker:
                     aborted = True
                     rest = len(plan) - i
                     break
+                # 登录态检查点：中途掉登录不再一路失败到底——留守等待重新扫码（前端自动弹码），
+                # 成功后继续做剩余卷子（已完成卷子的状态如实保留，不会被重做）
+                self._ensure_login_or_wait(driver, task_id)
                 if i > 0:
                     # 上一卷结束停在结果页：先回学习日志，下一卷的 open_paper 才点得到
                     # want_name：滚到目标卷出现即停，不必等整页懒加载
