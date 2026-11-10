@@ -514,10 +514,28 @@ export const useConsoleStore = defineStore('console', () => {
     }
   }
 
-  /** 结束任务并回到主页：删除任务记录（成绩已在雨课堂、答案已入库），清空本地任务视图。 */
+  /** 结束任务并回到主页：先中断（运行中时）再删除任务记录（成绩已在雨课堂、答案已入库），清空本地任务视图。 */
   async function endTaskGoHome(silent = false) {
     const t = task.value
     if (!t) return
+    if (!silent) {
+      try {
+        await ElMessageBox.confirm('结束并删除当前任务，回到主页。确认结束？', '结束任务', {
+          confirmButtonText: '结束任务',
+          cancelButtonText: '再想想',
+          type: 'warning',
+        })
+      } catch {
+        return // 用户取消
+      }
+    }
+    if (t.status === 'RUNNING' || t.status === 'WAITING_BATCH' || t.status === 'PENDING') {
+      try {
+        await interruptTask(t.taskId)
+      } catch {
+        // 已停/已终态：继续删
+      }
+    }
     try {
       await deleteTask(t.taskId)
     } catch {
@@ -533,6 +551,29 @@ export const useConsoleStore = defineStore('console', () => {
     if (!silent) {
       log('ok', '任务已结束', '回到主页；下次从「扫码登录」重新开始')
       ElMessage.success('任务已结束，回到主页')
+    }
+  }
+
+  /** 中断任务：Agent 在安全点停止，任务转「已中断」终态（结果页可再结束回主页）。 */
+  async function interruptTaskNow() {
+    const current = task.value
+    if (!current) return
+    try {
+      await ElMessageBox.confirm(
+        '中断后 Agent 会在安全点停止，任务不再继续；已完成的卷子保留。确认中断？',
+        '中断任务',
+        { confirmButtonText: '中断任务', cancelButtonText: '再想想', type: 'warning' },
+      )
+    } catch {
+      return // 用户取消
+    }
+    busy.value = true
+    try {
+      await interruptTask(current.taskId)
+      await loadTask(current.taskId)
+      log('warn', '任务已中断', '已完成的卷子保留，剩余卷子不再处理')
+    } finally {
+      busy.value = false
     }
   }
 
@@ -938,6 +979,7 @@ export const useConsoleStore = defineStore('console', () => {
     batchOptions,
     selectedBatch,
     endTaskGoHome,
+    interruptTaskNow,
     batchLoading,
     frame,
     frameLoading,

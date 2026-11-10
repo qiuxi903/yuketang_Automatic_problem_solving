@@ -569,6 +569,8 @@ class Worker:
                 log.info("[%s] 批次 %s 待作答 %d 套：%s",
                          self.name, batch, len(plan), [p["name"] for p in plan])
 
+            # 开做前更新阶段播报：否则心跳还挂着「等待扫码登录…已持续 Ns」误导用户要重新扫码
+            self._stage(task_id, "开始做题")
             stats = {"fetched": 0, "reused": 0, "skipped": 0, "answered": 0, "failed": 0}
             aborted = False
             for i, paper in enumerate(plan):
@@ -598,6 +600,9 @@ class Worker:
                 stats[result] = stats.get(result, 0) + 1
                 if result == "failed":
                     log.warning("[%s] 试卷 %s 未完成", self.name, paper["name"])
+                    # 失败且页面已被踢到登录页 → 走重扫等待，避免连环 failed 静默烧完所有卷子
+                    if driver._login_page_shown():
+                        self._ensure_login_or_wait(driver, task_id)
                 self._push_frame(driver, task_id, force=True)
 
             if aborted:

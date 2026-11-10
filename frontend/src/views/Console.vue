@@ -189,7 +189,8 @@ onMounted(async () => {
         <el-button v-if="store.canPause" @click="store.togglePause()">
           {{ store.task?.status === 'PAUSED' ? '继续做题' : '暂停' }}
         </el-button>
-        <el-button @click="deckRef?.openQrcode()">二维码</el-button>
+        <el-button @click="store.interruptTaskNow()">中断</el-button>
+        <el-button type="danger" plain @click="store.endTaskGoHome()">结束</el-button>
       </template>
     </div>
   </div>

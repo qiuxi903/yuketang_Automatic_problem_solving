@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { CircleClose, Collection, Document, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
+import { CircleClose, Collection, Delete, Document, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
 import { useAuthStore } from '@/store/auth'
 import { countdown, formatClock } from '@/utils/format'
@@ -468,6 +468,22 @@ defineExpose({
               ? '点「继续做题」会接着处理剩余卷子，已完成的不会重做。'
               : '暂停后 Agent 在安全点停下，随时可以继续。' }}
           </p>
+          <el-button
+            v-if="store.canPause"
+            class="full"
+            :icon="CircleClose"
+            :loading="store.busy"
+            @click="store.interruptTaskNow()"
+          >
+            中断任务
+          </el-button>
+          <el-button
+            class="full"
+            :icon="Delete"
+            @click="store.endTaskGoHome()"
+          >
+            结束任务，回到主页
+          </el-button>
         </div>
 
         <div class="menu-group">
