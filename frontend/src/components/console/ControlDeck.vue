@@ -346,6 +346,39 @@ defineExpose({
           </div>
         </div>
 
+        <!-- 批次选择：全自动因「未解锁」暂停时（或无推荐批次），在这里主动选日期；
+             确认未解锁的日期会被引导到开通页对应日期，付不付由用户决定 -->
+        <div class="menu-group">
+          <span class="eyebrow">选择要做的日期</span>
+          <template v-if="batchCandidates.length">
+            <div
+              v-for="opt in batchCandidates"
+              :key="opt.batch"
+              class="batch-row"
+              :class="{ 'is-picked': store.selectedBatch === opt.batch }"
+              role="button"
+              @click="store.selectedBatch = opt.batch"
+            >
+              <span class="b-name">{{ opt.batch }}</span>
+              <span class="b-meta">匹配 {{ opt.percent }}%</span>
+              <span class="b-meta">{{ opt.total }} 套</span>
+            </div>
+            <el-button
+              type="primary"
+              class="full"
+              :disabled="!store.selectedBatch"
+              :loading="store.busy"
+              @click="store.confirmBatch(store.selectedBatch, 'answer')"
+            >
+              确认做「{{ store.selectedBatch }}」
+            </el-button>
+            <p class="hint">做哪天解锁哪天；月卡所有日期都能做。未解锁的日期在确认后会引导开通，付不付由你决定。</p>
+          </template>
+          <p v-else class="hint">
+            还没有能匹配账号作业的答案库批次——请联系管理员补充答案库（采集对应日期的答案）后再开始。
+          </p>
+        </div>
+
         <!-- 手机端开始按钮统一在底部动作条，这里隐藏避免重复 -->
         <div class="menu-group mobile-hide">
           <span class="eyebrow">开始方式（二选一）</span>
@@ -731,22 +764,6 @@ defineExpose({
   display: none;
 }
 
-.autopilot-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  background: var(--accent-050);
-  border: 1px solid var(--accent-200);
-  border-radius: var(--r-md);
-}
-.autopilot-text {
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-600);
-}
-
 @media (max-width: 768px) {
   /* 移动端减负：标题行隐藏（分段标签已表明当前页），状态行只留状态点 */
   .deck-title {
@@ -869,6 +886,12 @@ defineExpose({
 .batch-row.is-picked {
   border-color: var(--accent);
   background: var(--accent-050);
+}
+.b-meta {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-500);
+  text-align: right;
 }
 .b-name {
   font-family: var(--font-mono);
