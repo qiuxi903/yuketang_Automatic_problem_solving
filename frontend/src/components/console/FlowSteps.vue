@@ -10,10 +10,11 @@ import { useConsoleStore } from '@/store/console'
 const store = useConsoleStore()
 
 const STEPS = [
-  { title: '新建任务并扫码', hint: '用手机扫码登录雨课堂' },
-  { title: '勾选卷子', hint: '在试卷清单勾选，点做题或取答案' },
-  { title: '自动做题中', hint: '进度实时更新，可暂停' },
-  { title: '完成导出', hint: '查看成绩，导出答案' },
+  { title: '扫码登录', hint: '发起任务并扫码登录雨课堂' },
+  { title: '勾选日期', hint: '选要做的日期并确认开做' },
+  { title: '勾选卷子', hint: '可只做勾选的卷子，默认全部' },
+  { title: '自动做题', hint: '进度实时更新，可暂停' },
+  { title: '查看结果', hint: '没问题就点「结束任务」' },
 ] as const
 
 const FAILED_LABEL: Record<string, string> = {
@@ -23,20 +24,30 @@ const FAILED_LABEL: Record<string, string> = {
 
 const index = computed(() => {
   const t = store.task
-  if (!t) return 0
-  if (t.status === 'WAITING_BATCH') return 1
-  if (t.status === 'SUCCESS' || t.status === 'FAILED' || t.status === 'CANCELLED') return 3
-  // 任务一创建后端就置 RUNNING（Agent 正在等你扫码）：还没登录就仍算「扫码」这一步；
-  // 已登录但批次未确认 → 仍在「勾选卷子」这一步，别跳到「自动做题」又跳回来
-  if (!store.loggedIn) return 0
-  if (!t.batch) return 1
-  return 2
+  if (!t) return 0 // 主页：无任务，第 1 步待发起
+  switch (t.status) {
+    case 'PENDING':
+      return 0
+    case 'WAITING_BATCH':
+      // 已选日期 → 进入「勾选卷子」；未选 → 停在「勾选日期」
+      return store.selectedBatch ? 2 : 1
+    case 'RUNNING':
+    case 'PAUSED':
+      if (!store.loggedIn) return 0 // Agent 开浏览器等扫码
+      if (!t.batch) return 1 // 已登录、清单未确认
+      return 3
+    case 'SUCCESS':
+    case 'FAILED':
+    case 'CANCELLED':
+      return 4
+  }
+  return 0
 })
 
-/** 终态（失败/中断）时第四步显示原因而不是「完成导出」。 */
+/** 终态（失败/中断）时第五步显示原因而不是「查看结果」。 */
 const lastTitle = computed(() => {
   const status = store.task?.status
-  return (status && FAILED_LABEL[status]) || STEPS[3].title
+  return (status && FAILED_LABEL[status]) || STEPS[4].title
 })
 
 type StepTone = 'done' | 'active' | 'todo' | 'bad'
@@ -63,7 +74,7 @@ const tones = computed<StepTone[]>(() =>
           <template v-else>{{ i + 1 }}</template>
         </span>
         <span class="flow-text">
-          <b>{{ i === 3 ? lastTitle : step.title }}</b>
+          <b>{{ i === 4 ? lastTitle : step.title }}</b>
           <em>{{ step.hint }}</em>
         </span>
       </div>

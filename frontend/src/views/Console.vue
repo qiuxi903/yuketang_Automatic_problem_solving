@@ -20,7 +20,7 @@ const isMobile = useIsMobile()
 const selectedPaper = ref<string | null>(null)
 const deckRef = ref<InstanceType<typeof ControlDeck> | null>(null)
 
-/* 移动端：四步流程向导（扫码 → 选卷 → 做题 → 结果），步骤由任务状态自动推导并自动推进；
+/* 移动端：五步流程向导（扫码 → 选日期 → 选卷 → 做题 → 结果），步骤由任务状态自动推导并自动推进；
    桌面端三栏同时可见，不受影响。 */
 const mobilePanel = ref<'control' | 'answer' | 'papers'>('control')
 /** 用户手动点步骤条的时间：3 秒内不自动抢跳，避免和用户操作打架 */
@@ -28,31 +28,32 @@ const manualAt = ref(0)
 
 const STEPS = [
   { n: 1, label: '扫码登录', panel: 'control' as const },
-  { n: 2, label: '勾选卷子', panel: 'papers' as const },
-  { n: 3, label: '自动做题', panel: 'answer' as const },
-  { n: 4, label: '查看结果', panel: 'answer' as const },
+  { n: 2, label: '勾选日期', panel: 'control' as const },
+  { n: 3, label: '勾选卷子', panel: 'papers' as const },
+  { n: 4, label: '自动做题', panel: 'answer' as const },
+  { n: 5, label: '查看结果', panel: 'answer' as const },
 ]
 
 const step = computed(() => {
   const t = store.task
   if (!t) return 1
   switch (t.status) {
+    case 'PENDING':
+      return 1
+    case 'WAITING_BATCH':
+      // 已选日期 → 进「勾选卷子」；未选 → 停在「勾选日期」
+      return store.selectedBatch ? 3 : 2
+    case 'RUNNING':
+    case 'PAUSED':
+      if (!store.loggedIn) return 1 // Agent 开浏览器等扫码
+      if (!t.batch) return 2 // 已登录、清单未确认
+      return 4
     case 'SUCCESS':
     case 'FAILED':
     case 'CANCELLED':
-      return 4
-    case 'WAITING_BATCH':
-      return 2 // 扫完码：直接落到「勾选卷子」
-    case 'RUNNING':
-    case 'PAUSED':
-      // 批次未确认（扫码后等选日期）→ 停在「勾选卷子」；确认批次后才进「自动做题」。
-      // 任务一创建后端就置 RUNNING（Agent 正在开浏览器等你扫码），
-      // 此时还没登录 → 仍停在「扫码登录」，别把用户甩到做题页
-      if (!store.task?.batch) return 2
-      return store.loggedIn ? 3 : 1
-    default:
-      return 1 // PENDING / 等待扫码
+      return 5
   }
+  return 1
 })
 
 watch(
@@ -69,11 +70,11 @@ function gotoStep(n: number) {
   mobilePanel.value = STEPS[n - 1].panel
 }
 
-/** 底部动作条：选卷/做题两步给主操作；扫码阶段给「查看二维码」（弹窗关掉后也能随时找回） */
+/** 底部动作条：勾选卷子/做题两步给主操作；扫码阶段给「查看二维码」（弹窗关掉后也能随时找回） */
 const showActionBar = computed(
   () =>
     isMobile.value &&
-    (step.value === 2 || step.value === 3 || (step.value === 1 && store.hasTask)),
+    (step.value === 3 || step.value === 4 || (step.value === 1 && store.hasTask)),
 )
 
 async function startChecked(mode: TaskMode) {
@@ -156,7 +157,7 @@ onMounted(async () => {
 
     <!-- 移动端底部动作条：永远告诉用户「下一步点什么」 -->
     <div v-if="showActionBar" class="action-bar">
-      <template v-if="step === 2">
+      <template v-if="step === 3">
         <span class="ab-hint">
           {{ store.selectedPapers.length ? `已选 ${store.selectedPapers.length} 套` : '不勾选则处理全部作业' }}
         </span>
@@ -165,7 +166,7 @@ onMounted(async () => {
           :loading="store.starting"
           @click="startChecked('answer')"
         >
-          {{ store.selectedPapers.length ? '开始做题' : '做全部作业' }}
+          {{ store.selectedPapers.length ? `开始做题（${store.selectedPapers.length} 卷）` : '做全部作业' }}
         </el-button>
         <el-button
           v-if="auth.isAdmin"

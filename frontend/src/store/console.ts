@@ -499,6 +499,58 @@ export const useConsoleStore = defineStore('console', () => {
     }
   }
 
+  /* —— 任务结束与空闲回收 —— */
+
+  /** 终态空闲标记：任务进入终态时记录时间；用户点「结束任务」立即清理，
+      没点则终态 1 小时后自动清理——保证下次打开都是从「扫码登录」开始的标准流程。 */
+  const TERMINAL_KEY = 'ykt_task_terminal_at'
+  let homeTimer: number | undefined
+
+  function markTerminal() {
+    const t = task.value
+    const terminal = !!t && (t.status === 'SUCCESS' || t.status === 'FAILED' || t.status === 'CANCELLED')
+    if (terminal) {
+      if (!localStorage.getItem(TERMINAL_KEY)) localStorage.setItem(TERMINAL_KEY, String(Date.now()))
+    } else {
+      localStorage.removeItem(TERMINAL_KEY)
+    }
+  }
+
+  /** 结束任务并回到主页：删除任务记录（成绩已在雨课堂、答案已入库），清空本地任务视图。 */
+  async function endTaskGoHome(silent = false) {
+    const t = task.value
+    if (!t) return
+    try {
+      await deleteTask(t.taskId)
+    } catch {
+      // 任务可能已被后端清理，本地照常收尾
+    }
+    detach()
+    clearEvents()
+    task.value = null
+    session.value = null
+    batchOptions.value = null
+    selectedBatch.value = ''
+    localStorage.removeItem(TERMINAL_KEY)
+    if (!silent) {
+      log('ok', '任务已结束', '回到主页；下次从「扫码登录」重新开始')
+      ElMessage.success('任务已结束，回到主页')
+    }
+  }
+
+  function startHomeWatch() {
+    if (homeTimer) return
+    homeTimer = window.setInterval(() => {
+      markTerminal()
+      const t = task.value
+      const terminal = !!t && (t.status === 'SUCCESS' || t.status === 'FAILED' || t.status === 'CANCELLED')
+      if (!terminal) return
+      const at = Number(localStorage.getItem(TERMINAL_KEY) || 0)
+      if (at && Date.now() - at > 3600_000) void endTaskGoHome(true)
+    }, 60_000)
+  }
+  startHomeWatch()
+
   /* —— 对外动作 —— */
 
   async function startTask() {
@@ -882,6 +934,7 @@ export const useConsoleStore = defineStore('console', () => {
     busy,
     batchOptions,
     selectedBatch,
+    endTaskGoHome,
     batchLoading,
     frame,
     frameLoading,
