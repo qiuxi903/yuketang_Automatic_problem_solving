@@ -464,24 +464,12 @@ defineExpose({
 
         <div class="qr-meta">
           <div class="qr-row">
-            <span>会话状态</span>
-            <StatusPill v-if="sessionStatus" :tone="sessionStatus.tone">
-              {{ sessionStatus.label }}
-            </StatusPill>
-          </div>
-          <div class="qr-row">
-            <span>剩余有效</span>
-            <strong class="mono-sm" :class="{ expired: remain.expired }">{{ remain.text }}</strong>
-          </div>
-          <div class="qr-row">
             <span>雨课堂账号</span>
             <strong>{{ store.session?.yktName || '待扫码' }}</strong>
           </div>
           <div class="qr-row">
-            <span>任务模式</span>
-            <strong>{{
-              store.task?.batch ? (MODE_LABEL[store.task?.mode ?? ''] ?? '—') : '待选择'
-            }}</strong>
+            <span>扫码后</span>
+            <strong>自动开始做题，无需任何操作</strong>
           </div>
         </div>
 
@@ -791,6 +779,22 @@ defineExpose({
     gap: 14px;
   }
   .menu-group {
+
+.autopilot-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--accent-050);
+  border: 1px solid var(--accent-200);
+  border-radius: var(--r-md);
+}
+.autopilot-text {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-600);
+}
     gap: 9px;
   }
   /* 触控目标加大：手机上按钮统一 46px 高 */
