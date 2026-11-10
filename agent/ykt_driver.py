@@ -69,6 +69,9 @@ class Driver:
         self.course_url = None
         # 采集/复用模式下置 True：任何调用 submit() 都会直接抛错，杜绝重复消耗作答次数
         self.submit_forbidden = False
+        # 最近一次页面 WebSocket 帧时间：扫码/授权期间雨课堂经 WS 推送状态与凭证，
+        # worker 刷新登录页前据此避让（见 _attach_ws_probe）
+        self._ws_last = 0.0
 
     def _profile_dir(self):
         import os
@@ -84,13 +87,47 @@ class Driver:
             headless=self.headless,
             slow_mo=config.SLOW_MO,
             channel=config.BROWSER_CHANNEL or None,
-            args=["--disable-blink-features=AutomationControlled"],
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                # 页面在后台时 Chromium 默认把 JS 定时器节流到 ~1/min：
+                # 雨课堂登录页换码、扫码后「取登录凭证」的轮询全靠定时器，
+                # 被节流后手机端授权会等超时报「登录凭证获取失败」——全关后台节流
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+            ],
             user_agent=config.USER_AGENT,
             viewport={"width": 1440, "height": 900},
         )
         self.browser = None  # 持久化上下文没有独立的 browser 对象
         self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
         self.page.set_default_timeout(15000)
+        self._attach_ws_probe()
+
+    def _attach_ws_probe(self):
+        """监听页面 WebSocket 帧活动。
+
+        雨课堂登录页的扫码状态与登录凭证全靠 WS 推送（页面无 HTTP 轮询）——
+        用户扫码/授权期间帧会密集出现。worker 刷新登录页（换新码）前检查
+        ws_last_frame()：有近期帧活动就推迟刷新，避免把正在进行的授权会话废掉
+        （reload 会断开 WS，服务器凭证推不到手机端，报「登录凭证获取失败」）。
+        """
+        def _on_ws(ws):
+            def _activity(_payload=None):
+                self._ws_last = time.time()
+            try:
+                ws.on("framereceived", _activity)
+                ws.on("framesent", _activity)
+            except Exception:
+                pass
+        try:
+            self.page.on("websocket", _on_ws)
+        except Exception:
+            pass
+
+    def ws_last_frame(self):
+        """最近一次页面 WebSocket 帧时间（0 = 从未收到帧）。"""
+        return self._ws_last
 
     def start(self):
         self._pw = sync_playwright().start()
