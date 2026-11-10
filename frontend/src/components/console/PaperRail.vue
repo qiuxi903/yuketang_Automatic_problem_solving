@@ -9,6 +9,10 @@ import { useConsoleStore } from '@/store/console'
 import { MODE_LABEL } from '@/utils/status'
 import StatusPill from '@/components/ui/StatusPill.vue'
 
+/** 批次后置：登录成功等确认日期时，清单顶部给一键确认条（手机端主路径不用切视图）。 */
+const waitingBatch = computed(() => store.task?.status === 'WAITING_BATCH')
+const batchOpts = computed(() => store.batchOptions?.options ?? [])
+
 /** 左栏试卷清单：按答案库日期分组（可收起/展开），支持勾选卷子单独作答。 */
 const props = defineProps<{ selectedPaper: string | null }>()
 
@@ -130,6 +134,29 @@ async function startChecked(mode: TaskMode) {
           {{ MODE_LABEL[store.task?.mode ?? ''] ?? store.task?.mode }}
         </StatusPill>
         <span class="batch mono-sm">答案库：{{ store.task.batch }}</span>
+      </template>
+      <template v-else-if="waitingBatch && batchOpts.length">
+        <div class="batch-quick">
+          <span class="bq-label">做哪天：</span>
+          <button
+            v-for="opt in batchOpts"
+            :key="opt.batch"
+            class="bq-opt"
+            :class="{ picked: store.selectedBatch === opt.batch }"
+            type="button"
+            @click="store.selectedBatch = opt.batch"
+          >
+            {{ opt.batch }}
+          </button>
+          <button
+            class="bq-go"
+            type="button"
+            :disabled="!store.selectedBatch || store.busy"
+            @click="store.confirmBatch(store.selectedBatch, 'answer')"
+          >
+            确认做「{{ store.selectedBatch || '…' }}」
+          </button>
+        </div>
       </template>
       <span v-else class="batch muted">登录后确认答案库</span>
     </div>
@@ -632,5 +659,50 @@ async function startChecked(mode: TaskMode) {
   .rail-foot {
     padding: 12px 16px;
   }
+}
+
+/* —— 批次快捷条：WAITING_BATCH 时清单顶部一键确认日期（手机端主路径） —— */
+.batch-quick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.bq-label {
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.bq-opt {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-600);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+}
+.bq-opt.picked {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-050);
+  font-weight: 700;
+}
+.bq-go {
+  width: 100%;
+  margin-top: 4px;
+  padding: 9px 0;
+  border: none;
+  border-radius: var(--r-sm);
+  background: var(--accent);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.bq-go:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 </style>

@@ -26,8 +26,10 @@ const index = computed(() => {
   if (!t) return 0
   if (t.status === 'WAITING_BATCH') return 1
   if (t.status === 'SUCCESS' || t.status === 'FAILED' || t.status === 'CANCELLED') return 3
-  // 任务一创建后端就置 RUNNING（Agent 正在等你扫码）：还没登录就仍算「扫码」这一步
+  // 任务一创建后端就置 RUNNING（Agent 正在等你扫码）：还没登录就仍算「扫码」这一步；
+  // 已登录但批次未确认 → 仍在「勾选卷子」这一步，别跳到「自动做题」又跳回来
   if (!store.loggedIn) return 0
+  if (!t.batch) return 1
   return 2
 })
 
