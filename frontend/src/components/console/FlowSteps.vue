@@ -47,7 +47,7 @@ const index = computed(() => {
 /** 各步提示：扫码成功、清单还在抓取时，第 2 步实时显示「正在读取」。 */
 const hints = computed(() => {
   const t = store.task
-  const list = STEPS.map((s) => s.hint)
+  const list: string[] = STEPS.map((s) => s.hint)
   if (t && t.status === 'RUNNING' && store.loggedIn && !t.batch) list[1] = '正在读取账号作业清单…'
   return list
 })
