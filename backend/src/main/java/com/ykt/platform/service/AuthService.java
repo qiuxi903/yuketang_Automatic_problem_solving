@@ -28,7 +28,7 @@ public class AuthService {
 
     /** 用户名规则：2-20 位，中文/字母/数字/下划线。 */
     private static final java.util.regex.Pattern USERNAME_RE =
-            java.util.regex.Pattern.compile("^[\u4e00-\u9fa5A-Za-z0-9_]{2,20}$");
+            java.util.regex.Pattern.compile("^[\u4e00-\u9fa5A-Za-z0-9_]{3,20}$");
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -67,7 +67,7 @@ public class AuthService {
         }
         if (!USERNAME_RE.matcher(username).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "用户名需 2-20 位，只能包含中文、字母、数字或下划线");
+                    "用户名需 3-20 位，只能包含中文、字母、数字或下划线");
         }
         if (username.matches("\\d+")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字，太简单容易被猜");
@@ -167,7 +167,7 @@ public class AuthService {
         }
         if (!USERNAME_RE.matcher(newUsername).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "用户名需 2-20 位，只能包含中文、字母、数字或下划线");
+                    "用户名需 3-20 位，只能包含中文、字母、数字或下划线");
         }
         if (newUsername.matches("\\d+")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字，太简单容易被猜");

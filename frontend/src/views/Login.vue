@@ -34,7 +34,7 @@ const rules: FormRules = {
 const registerRules: FormRules = {
   username: [
     { required: true, message: '请输入用户名', trigger: 'blur' },
-    { pattern: /^[一-龥A-Za-z0-9_]{2,20}$/, message: '2-20 位，只能用中文、字母、数字或下划线', trigger: 'blur' },
+    { pattern: /^[一-龥A-Za-z0-9_]{3,20}$/, message: '3-20 位，只能用中文、字母、数字或下划线', trigger: 'blur' },
     {
       validator: (_r, v, cb) => {
         if (v && /^\d+$/.test(v)) cb(new Error('不能是纯数字，太简单容易被猜'))

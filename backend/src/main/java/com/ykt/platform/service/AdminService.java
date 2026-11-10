@@ -166,9 +166,9 @@ public class AdminService {
         if (newUsername.equals(user.getUsername())) {
             return newUsername;
         }
-        if (!java.util.regex.Pattern.compile("^[一-龥A-Za-z0-9_]{2,20}$").matcher(newUsername).matches()) {
+        if (!java.util.regex.Pattern.compile("^[一-龥A-Za-z0-9_]{3,20}$").matcher(newUsername).matches()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                    "用户名需 2-20 位，只能包含中文、字母、数字或下划线");
+                    "用户名需 3-20 位，只能包含中文、字母、数字或下划线");
         }
         if (newUsername.matches("\\d+")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字");
