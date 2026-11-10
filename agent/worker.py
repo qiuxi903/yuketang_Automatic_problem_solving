@@ -181,6 +181,7 @@ class Worker:
         """
         deadline = time.time() + config.LOGIN_TIMEOUT
         posted_at = 0.0
+        refreshed_at = time.time()
         shell_since = 0.0
         shell_warned = False
         while time.time() < deadline:
@@ -199,14 +200,33 @@ class Worker:
             else:
                 shell_since = 0.0
                 shell_warned = False
+            # 登录页二维码约 2 分钟过期，且页面在后台浏览器里可能不自动换码——
+            # 每 ~90s 主动刷新登录页拿新码，保证回传的码始终可扫
+            if time.time() - refreshed_at >= 90:
+                try:
+                    driver.page.reload(wait_until="domcontentloaded", timeout=20000)
+                    refreshed_at = time.time()
+                    shell_since = 0.0
+                    shell_warned = False
+                    driver.page.wait_for_timeout(2000)
+                    qr = driver.capture_qrcode()
+                    if qr:
+                        self.backend.post_qrcode(task_id, qr)
+                        posted_at = time.time()
+                        log.info("[%s] 登录页已刷新，新二维码已回传（旧码约 2 分钟过期）", self.name)
+                except Exception as exc:
+                    log.warning("[%s] 刷新登录页换码失败：%s", self.name, exc)
             if time.time() - posted_at >= 12:
                 try:
                     qr = driver.capture_qrcode()
                     if qr:
                         self.backend.post_qrcode(task_id, qr)
                         posted_at = time.time()
-                except Exception:
-                    pass
+                        log.info("[%s] 二维码已自动刷新回传（12s 换码）", self.name)
+                    else:
+                        log.warning("[%s] 截取二维码为空，本轮跳过换码", self.name)
+                except Exception as exc:
+                    log.warning("[%s] 自动换码失败：%s", self.name, exc)
             driver.page.wait_for_timeout(1500)
         raise LoginRequired("扫码登录超时")
 
@@ -232,6 +252,7 @@ class Worker:
         except Exception:
             pass
         posted_at = 0.0
+        refreshed_at = time.time()
         while time.time() < deadline:
             if self._abort.is_set():
                 raise AbortTask()
@@ -254,14 +275,30 @@ class Worker:
                     except Exception:
                         pass
                 return
+            # 同上：重扫等待期间每 ~90s 主动刷新登录页，避免回传的码过期
+            if time.time() - refreshed_at >= 90:
+                try:
+                    driver.page.reload(wait_until="domcontentloaded", timeout=20000)
+                    refreshed_at = time.time()
+                    driver.page.wait_for_timeout(2000)
+                    qr = driver.capture_qrcode()
+                    if qr:
+                        self.backend.post_qrcode(task_id, qr)
+                        posted_at = time.time()
+                        log.info("[%s] 重扫登录页已刷新，新二维码已回传", self.name)
+                except Exception as exc:
+                    log.warning("[%s] 重扫刷新登录页失败：%s", self.name, exc)
             if time.time() - posted_at >= 12:
                 try:
                     qr = driver.capture_qrcode()
                     if qr:
                         self.backend.post_qrcode(task_id, qr)
                         posted_at = time.time()
-                except Exception:
-                    pass
+                        log.info("[%s] 重扫二维码已刷新回传（12s 换码）", self.name)
+                    else:
+                        log.warning("[%s] 重扫截码为空，本轮跳过", self.name)
+                except Exception as exc:
+                    log.warning("[%s] 重扫换码失败：%s", self.name, exc)
             driver.page.wait_for_timeout(1500)
         raise LoginRequired("重新扫码超时（登录已过期，未在限时内重新扫码）")
 
