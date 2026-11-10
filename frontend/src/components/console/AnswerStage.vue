@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/store/auth'
+
+const auth = useAuthStore()
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { Download, Refresh } from '@element-plus/icons-vue'
 import { getPaperAnswers } from '@/api/paper'
@@ -177,6 +180,7 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
           </div>
           <div class="done-actions">
             <el-button
+              v-if="auth.isAdmin"
               type="primary"
               :icon="Download"
               :disabled="task.donePaper <= 0"

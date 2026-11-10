@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { useAuthStore } from '@/store/auth'
+
+const auth = useAuthStore()
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { TaskMode } from '@/types'
@@ -141,7 +144,7 @@ async function startChecked(mode: TaskMode) {
       <button class="pick-go" type="button" :disabled="!store.selectedPapers.length" @click="startChecked('answer')">
         做题
       </button>
-      <button class="pick-go pick-ans" type="button" :disabled="!store.selectedPapers.length" @click="startChecked('collect')">
+      <button v-if="auth.isAdmin" class="pick-go pick-ans" type="button" :disabled="!store.selectedPapers.length" @click="startChecked('collect')">
         取答案
       </button>
     </div>
