@@ -27,6 +27,14 @@ function goAnswerCenter() {
 const form = ref<{ mode: TaskMode }>({ mode: 'answer' })
 
 const qrVisible = ref(false)
+// 窗口期：已扫码登录、Agent 正在抓账号作业清单（清单未回传）——显示进度提示，避免用户不知所措
+const fetchingPapers = computed(() => {
+  const t = store.task
+  if (!t || t.batch) return false
+  if (t.status === 'WAITING_BATCH') return store.batchLoading || !store.batchOptions
+  return t.status === 'RUNNING' && store.loggedIn
+})
+
 // 死会话判定：会话已过期/关闭且没有活跃任务在出码——弹窗里的码是死的，扫码必失败
 const qrDead = computed(() => {
   const st = store.session?.status
@@ -443,6 +451,18 @@ defineExpose({
       </template>
 
       <template v-else>
+        <div v-if="fetchingPapers" class="menu-group">
+          <span class="eyebrow">正在获取题目列表</span>
+          <el-progress
+            :percentage="100"
+            :indeterminate="true"
+            :show-text="false"
+            :stroke-width="10"
+          />
+          <p class="hint">
+            已扫码登录 ✓ 正在读取账号里的作业清单——卷子多时需要一点时间，读完后会出现「选择要做的日期」。
+          </p>
+        </div>
         <div class="menu-group">
           <span class="eyebrow">任务控制</span>
           <el-button
