@@ -4,13 +4,13 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { CircleClose, Collection, Document, Download, Promotion, Refresh, Select, VideoPause, VideoPlay, WarningFilled } from '@element-plus/icons-vue'
 import { useConsoleStore } from '@/store/console'
 import { useAuthStore } from '@/store/auth'
-
-const auth = useAuthStore()
 import { countdown, formatClock } from '@/utils/format'
 import { MODE_HINT, MODE_LABEL, sessionMeta, taskMeta } from '@/utils/status'
 import StatusPill from '@/components/ui/StatusPill.vue'
 import type { TaskMode } from '@/types'
 import { useRouter } from 'vue-router'
+
+const auth = useAuthStore()
 
 const store = useConsoleStore()
 const router = useRouter()
