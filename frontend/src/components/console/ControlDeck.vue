@@ -371,8 +371,8 @@ defineExpose({
           >
             {{ store.selectedPapers.length ? '取勾选卷子的答案' : '先在清单勾选卷子' }}
           </el-button>
-          <p class="hint">
-            「取答案」永远免费；「自动做题」需已解锁所选日期（未解锁会引导去 VIP 页开通）。
+          <p v-if="auth.isAdmin" class="hint">
+            「自动做题」需已解锁所选日期（未解锁会引导去 VIP 页开通）。
           </p>
           <p class="hint">
             没勾选就直接点的话，会处理所选批次的全部卷子，外加账号里未入答案库的新卷子

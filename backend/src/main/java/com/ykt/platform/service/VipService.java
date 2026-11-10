@@ -202,7 +202,7 @@ public class VipService {
         }
         if ("collect".equalsIgnoreCase(mode)) {
             throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.FORBIDDEN, "取答案功能仅对管理员开放");
+                    org.springframework.http.HttpStatus.FORBIDDEN, "该功能暂未开放");
         }
         if (monthCardActive(userId)) {
             return;
@@ -234,7 +234,7 @@ public class VipService {
         // collect=只采答案：仅管理员开放
         if ("collect".equalsIgnoreCase(mode)) {
             throw new org.springframework.web.server.ResponseStatusException(
-                    org.springframework.http.HttpStatus.FORBIDDEN, "取答案功能仅对管理员开放");
+                    org.springframework.http.HttpStatus.FORBIDDEN, "该功能暂未开放");
         }
         if (batchUnlocked(userId, batch)) {
             return;
