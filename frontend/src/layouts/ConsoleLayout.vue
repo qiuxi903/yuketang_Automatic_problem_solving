@@ -1,28 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  CaretBottom,
-  Coin,
-  Collection,
-  DataLine,
-  Document,
-  Monitor,
-  Moon,
-  Refresh,
-  Setting,
-  Sunny,
-  SwitchButton,
-  User,
-  UserFilled,
-} from '@element-plus/icons-vue'
+import { CaretBottom, Coin, Collection, DataLine, Monitor, Moon, Refresh, Setting, Sunny, SwitchButton, User, UserFilled } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/store/auth'
 import { useConsoleStore } from '@/store/console'
-import { toggleTheme, useTheme } from '@/utils/theme'
 import StatusPill from '@/components/ui/StatusPill.vue'
-import type { TaskStatus } from '@/types'
-import { MODE_LABEL, taskMeta } from '@/utils/status'
-import { formatDateTime } from '@/utils/format'
+import { toggleTheme, useTheme } from '@/utils/theme'
 import { getVipStatus } from '@/api/vip'
 
 const route = useRoute()
@@ -45,26 +28,6 @@ async function loadMonthDays() {
   } catch {
     monthDaysLeft.value = null
   }
-}
-
-// 我的任务：跟着账号走，随时可查看该账号的全部任务并切换
-const tasksOpen = ref(false)
-
-async function openTasks() {
-  tasksOpen.value = true
-  await consoleStore.loadMyTasks()
-}
-
-async function pickTask(id: number) {
-  tasksOpen.value = false
-  if (route.name !== 'console') await router.push({ name: 'console' })
-  await consoleStore.switchTask(id)
-}
-
-/** 仅未结束的任务可中断；已完成 / 失败 / 已中断均不可再中断。 */
-const INTERRUPTIBLE: TaskStatus[] = ['PENDING', 'RUNNING', 'WAITING_BATCH', 'PAUSED']
-function canInterrupt(status: TaskStatus) {
-  return INTERRUPTIBLE.includes(status)
 }
 
 onMounted(() => {
@@ -165,11 +128,6 @@ function handleLogout() {
           <span class="mobile-hide">VIP</span>
         </button>
 
-        <button class="mytasks" type="button" @click="openTasks">
-          <el-icon><Document /></el-icon>
-          <span>我的任务</span>
-          <em v-if="consoleStore.myTasks.length" class="count">{{ consoleStore.myTasks.length }}</em>
-        </button>
 
         <StatusPill :tone="consoleStore.connected ? 'ok' : 'neutral'" class="conn mobile-hide">
           {{ consoleStore.connected ? '实时在线' : '等待连接' }}
@@ -202,81 +160,6 @@ function handleLogout() {
       </div>
     </header>
 
-    <el-drawer
-      v-model="tasksOpen"
-      class="tasks-drawer"
-      title="我的任务"
-      direction="rtl"
-      size="380px"
-    >
-      <div class="tasks-head">
-        <p class="tasks-hint">
-          任务绑定当前登录账号「{{ auth.username }}」，与浏览器无关；刷新或换设备登录后依旧可以在这里找到并继续。
-        </p>
-        <el-button
-          size="small"
-          :icon="Refresh"
-          :loading="consoleStore.myTasksLoading"
-          @click="consoleStore.loadMyTasks()"
-        >
-          刷新
-        </el-button>
-      </div>
-
-      <el-empty
-        v-if="!consoleStore.myTasks.length && !consoleStore.myTasksLoading"
-        description="该账号还没有任务"
-        :image-size="86"
-      />
-
-      <ul v-else class="tasks-list">
-        <li
-          v-for="item in consoleStore.myTasks"
-          :key="item.taskId"
-          class="task-row"
-          :class="{ 'is-active': item.taskId === consoleStore.activeTaskId }"
-          @click="pickTask(item.taskId)"
-        >
-          <div class="task-top">
-            <span class="task-id">#{{ item.taskId }}</span>
-            <span class="task-batch">{{ item.batch || '批次待确认' }}</span>
-            <StatusPill :tone="taskMeta(item.status).tone">{{ taskMeta(item.status).label }}</StatusPill>
-          </div>
-          <div class="task-sub">
-            <span>{{ MODE_LABEL[item.mode] }}</span>
-            <span>进度 {{ item.donePaper }}/{{ item.totalPaper }} 套</span>
-          </div>
-          <div class="task-foot">
-            <span class="task-time">创建于 {{ formatDateTime(item.createdAt) }}</span>
-            <div class="task-actions">
-              <button
-                v-if="item.status === 'PAUSED'"
-                class="task-act is-go"
-                type="button"
-                @click.stop="consoleStore.resumeTaskById(item.taskId)"
-              >
-                继续
-              </button>
-              <button
-                v-if="canInterrupt(item.status)"
-                class="task-act"
-                type="button"
-                @click.stop="consoleStore.interruptTaskById(item.taskId)"
-              >
-                中断
-              </button>
-              <button
-                class="task-act is-danger"
-                type="button"
-                @click.stop="consoleStore.deleteTaskById(item.taskId)"
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        </li>
-      </ul>
-    </el-drawer>
 
     <main class="shell-body">
       <router-view />
@@ -466,39 +349,6 @@ function handleLogout() {
   background: var(--accent-050);
 }
 
-.mytasks {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  color: var(--ink-700);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
-}
-.mytasks:hover {
-  color: var(--accent-700);
-  border-color: var(--accent);
-  background: var(--accent-100);
-}
-.mytasks .count {
-  font-style: normal;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 99px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
-  display: grid;
-  place-items: center;
-}
 
 /* —— 月卡到期徽章 —— */
 .month-pill {
@@ -624,22 +474,12 @@ function handleLogout() {
   .brand-text strong {
     font-size: 16.5px;
   }
-  .mytasks span {
-    display: none;
-  }
-  .mytasks {
-    height: 38px;
-    padding: 0 10px;
-  }
   .vip-entry {
     height: 38px;
     padding: 0 11px;
   }
   .month-pill {
     height: 38px;
-  }
-  .conn {
-    display: none;
   }
   .mobile-hide {
     display: none;
@@ -714,116 +554,4 @@ function handleLogout() {
 }
 
 /* —— 我的任务抽屉 —— */
-.tasks-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.tasks-hint {
-  flex: 1;
-  margin: 0;
-  font-size: 12.5px;
-  line-height: 1.6;
-  color: var(--ink-500);
-}
-.tasks-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.task-row {
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  background: var(--surface);
-  cursor: pointer;
-  transition: border-color 0.16s ease, box-shadow 0.16s ease, background-color 0.16s ease;
-}
-.task-row:hover {
-  border-color: var(--accent);
-  box-shadow: var(--shadow-sm);
-}
-.task-row.is-active {
-  border-color: var(--accent);
-  background: var(--accent-100);
-}
-.task-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.task-id {
-  font-family: var(--font-mono, var(--font-sans));
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink-800);
-}
-.task-batch {
-  flex: 1;
-  font-size: 12.5px;
-  color: var(--ink-500);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.task-sub {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 7px;
-  font-size: 12.5px;
-  color: var(--ink-600);
-}
-.task-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 8px;
-}
-.task-time {
-  font-size: 12px;
-  color: var(--ink-400);
-}
-.task-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.task-act {
-  padding: 3px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  color: var(--ink-600);
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
-}
-.task-act:hover {
-  color: var(--accent-700);
-  border-color: var(--accent);
-  background: var(--accent-100);
-}
-.task-act.is-danger:hover {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--danger-100);
-}
-.task-act.is-go {
-  color: var(--accent-700);
-  border-color: var(--accent-200);
-  background: var(--accent-050);
-}
-.task-act.is-go:hover {
-  color: #fff;
-  border-color: var(--accent);
-  background: var(--accent);
-}
 </style>
