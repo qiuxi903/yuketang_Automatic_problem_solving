@@ -463,7 +463,7 @@ defineExpose({
           </p>
         </div>
 
-        <div class="menu-group mobile-hide">
+        <div class="menu-group">
           <span class="eyebrow">扫码 / 会话</span>
           <div class="btn-grid">
             <el-button :icon="Promotion" @click="qrVisible = true">查看二维码</el-button>
