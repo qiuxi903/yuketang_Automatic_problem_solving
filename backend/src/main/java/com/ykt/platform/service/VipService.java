@@ -119,7 +119,7 @@ public class VipService {
         return settingsRepository.findAll().stream().findFirst().orElseGet(() -> {
             VipSettings s = new VipSettings();
             s.setListenToken(randomToken(32));
-            log.info("VIP 设置缺失，已按默认值种子（单日 300 分 / 月卡 2900 分 / 30 天 / LISTEN）");
+            log.info("VIP 设置缺失，已按默认值种子（单日 500 分 / 月卡 2000 分 / 30 天 / LISTEN）");
             return settingsRepository.save(s);
         });
     }

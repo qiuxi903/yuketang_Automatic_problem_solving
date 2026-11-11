@@ -4,6 +4,7 @@ import com.ykt.platform.entity.User;
 import com.ykt.platform.entity.VipAccount;
 import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.repository.VipAccountRepository;
+import com.ykt.platform.repository.VipSettingsRepository;
 import com.ykt.platform.service.VipService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,25 +27,39 @@ public class VipBootstrap {
     private final UserRepository userRepository;
     private final VipAccountRepository accountRepository;
     private final VipService vipService;
+    private final VipSettingsRepository settingsRepository;
     private final int freeQuotaOnRegister;
 
     public VipBootstrap(UserRepository userRepository,
                         VipAccountRepository accountRepository,
                         VipService vipService,
-                        VipProperties properties) {
+                        VipProperties properties,
+                        VipSettingsRepository settingsRepository) {
         this.userRepository = userRepository;
         this.accountRepository = accountRepository;
         this.vipService = vipService;
+        this.settingsRepository = settingsRepository;
         this.freeQuotaOnRegister = properties.freeQuotaOnRegister();
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() {
-        // 单例设置行（幂等）+ 旧默认月卡价一次性迁移（2900 -> 1500；仅当值仍是旧默认时才动，不覆盖管理员改过的价）
+        // 单例设置行（幂等）+ 旧默认价一次性迁移（仅当值仍是旧默认时才动，不覆盖管理员改过的价）：
+        // 单日 300 -> 500；月卡 2900/1500 -> 2000
         var settings = vipService.settings();
-        if (settings.getMonthPriceFen() == 2900) {
-            settings.setMonthPriceFen(1500);
-            log.info("月卡默认价已从 2900 分迁移为 1500 分");
+        boolean migrated = false;
+        if (settings.getDatePassPriceFen() == 300) {
+            settings.setDatePassPriceFen(500);
+            log.info("单日解锁默认价已从 300 分迁移为 500 分");
+            migrated = true;
+        }
+        if (settings.getMonthPriceFen() == 2900 || settings.getMonthPriceFen() == 1500) {
+            settings.setMonthPriceFen(2000);
+            log.info("月卡默认价已迁移为 2000 分");
+            migrated = true;
+        }
+        if (migrated) {
+            settingsRepository.save(settings);
         }
         // 存量用户补建 VIP 账户，享受与新注册用户相同的免费体验额度
         List<User> users = userRepository.findAll();

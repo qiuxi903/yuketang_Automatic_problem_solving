@@ -24,11 +24,11 @@ public class VipSettings {
 
     /** 单日（一个批次/日期）解锁价，单位分。 */
     @Column(nullable = false)
-    private int datePassPriceFen = 300;
+    private int datePassPriceFen = 500;
 
-    /** 月卡价格，单位分（默认 15 元；存量库由 VipBootstrap 从旧默认 2900 迁移）。 */
+    /** 月卡价格，单位分（默认 20 元；存量库由 VipBootstrap 从旧默认 2900/1500 迁移）。 */
     @Column(nullable = false)
-    private int monthPriceFen = 1500;
+    private int monthPriceFen = 2000;
 
     /** 月卡有效天数。 */
     @Column(nullable = false)
