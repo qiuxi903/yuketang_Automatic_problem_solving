@@ -459,6 +459,8 @@ function handleLogout() {
   }
   .shell-body {
     overflow: visible;
+    /* 底栏固定后给内容留出底部空间，最后一行不被 tabbar 挡住 */
+    padding-bottom: calc(60px + env(safe-area-inset-bottom));
   }
   .shell-body > :deep(*) {
     flex: none;
@@ -467,6 +469,11 @@ function handleLogout() {
     max-width: 100%;
   }
   .tabbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
     display: flex;
     align-items: stretch;
     height: calc(60px + env(safe-area-inset-bottom));
