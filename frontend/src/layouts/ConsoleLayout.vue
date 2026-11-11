@@ -458,12 +458,13 @@ function handleLogout() {
     min-height: 100%;
   }
   .shell-body {
+    /* 手机端不用 flex 布局：页面根为普通块、占满行宽、自然高，由 body 原生滚动 */
+    display: block;
     overflow: visible;
     /* 底栏固定后给内容留出底部空间，最后一行不被 tabbar 挡住 */
     padding-bottom: calc(60px + env(safe-area-inset-bottom));
   }
   .shell-body > :deep(*) {
-    flex: none;
     /* 页面根不可被内容的 min-content 撑破视口（横向溢出的总闸） */
     min-width: 0;
     max-width: 100%;
