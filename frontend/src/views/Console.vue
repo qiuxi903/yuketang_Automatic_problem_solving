@@ -328,6 +328,20 @@ onMounted(async () => {
   .step.is-done .step-label {
     color: var(--ink-500);
   }
+  /* 窄屏保险（<400px）：label 再缩一档、间距收紧，五步横排不裁切 */
+  @media (max-width: 400px) {
+    .steps {
+      gap: 4px;
+      padding: 8px;
+    }
+    .step {
+      padding: 6px 2px;
+    }
+    .step-label {
+      font-size: 10px;
+      letter-spacing: -0.02em;
+    }
+  }
 
   .workspace {
     grid-template-columns: 1fr;
