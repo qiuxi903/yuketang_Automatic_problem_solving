@@ -1,29 +1,22 @@
 <script setup lang="ts">
-import { useAuthStore } from '@/store/auth'
-
-const auth = useAuthStore()
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Search, Refresh, Medal, Download } from '@element-plus/icons-vue'
-import { listContributions, searchAnswers } from '@/api/community'
-import { exportAnswersBundle, getAnswersBundle, listPapers } from '@/api/paper'
-import StatusPill from '@/components/ui/StatusPill.vue'
+import { Search, Refresh } from '@element-plus/icons-vue'
+import { searchAnswers } from '@/api/community'
+import { getAnswersBundle, listPapers } from '@/api/paper'
 import type {
   AnswerPaperEntry,
   AnswersBundle,
   BatchMeta,
-  ContributionItem,
   SearchHitItem,
 } from '@/types'
-import { formatDateTime } from '@/utils/format'
 
 /**
  * 答案中心：平台全部答案的唯一入口。
- * - 全部试卷（默认）：列出答案库所有卷子，点开直接看答案、一键导出（管理员）
+ * - 全部试卷（默认）：列出答案库所有卷子，点开直接看答案
  * - 搜答案：按题干/答案关键词搜全库
- * - 获取记录：任务获取到的答案自动记录（新采集 / 复用都算）
  */
-const tab = ref<'papers' | 'search' | 'feed'>('papers')
+const tab = ref<'papers' | 'search'>('papers')
 
 /* —— 全部试卷：按日期分组，可展开收起 —— */
 const batches = ref<BatchMeta[]>([])
@@ -90,7 +83,6 @@ function toggleDate(date: string) {
 const activePaper = ref<PaperRow | null>(null)
 const answers = ref<AnswerPaperEntry | null>(null)
 const answersLoading = ref(false)
-const exporting = ref(false)
 
 async function loadManifest(force = false) {
   if (batches.value.length && !force) return
@@ -122,35 +114,6 @@ async function openPaper(row: PaperRow) {
   }
 }
 
-function safeName(value: string) {
-  return (value || 'all').replace(/[\\/:*?"<>|\s]+/g, '_')
-}
-
-async function download(params: { batch?: string; paper?: string; date?: string }, label: string) {
-  exporting.value = true
-  try {
-    const blob = await exportAnswersBundle(params)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `answers-${safeName(params.paper ?? params.date ?? params.batch ?? 'all')}.md`
-    link.click()
-    URL.revokeObjectURL(url)
-    ElMessage.success(`已导出 ${label}`)
-  } finally {
-    exporting.value = false
-  }
-}
-
-function exportCurrent() {
-  if (!activePaper.value) return
-  void download({ batch: activePaper.value.batch, paper: activePaper.value.name }, activePaper.value.name)
-}
-
-function exportDate(group: DateGroup) {
-  void download({ date: group.date }, `${group.date} 全部试卷`)
-}
-
 /* —— 搜答案 —— */
 const keyword = ref('')
 const searching = ref(false)
@@ -170,26 +133,8 @@ async function doSearch() {
   }
 }
 
-/* —— 获取记录 —— */
-const contributions = ref<ContributionItem[]>([])
-const feedLoading = ref(false)
-
-async function loadFeed() {
-  feedLoading.value = true
-  try {
-    contributions.value = await listContributions(20)
-  } finally {
-    feedLoading.value = false
-  }
-}
-
 onMounted(() => {
   void loadManifest()
-  void loadFeed()
-})
-
-watch(tab, (t) => {
-  if (t === 'feed' && !contributions.value.length) void loadFeed()
 })
 </script>
 
@@ -199,7 +144,7 @@ watch(tab, (t) => {
       <div class="hero-text">
         <h2>答案中心</h2>
         <p>
-          平台全部答案的唯一入口：做题获取到的答案<b>自动</b>进入这里（新采集与复用都有记录）；
+          平台全部答案的唯一入口：做题获取到的答案<b>自动</b>进入这里；
           任何人再做同一套卷子会先在这里匹配，<b>匹配到直接用，不消耗作答次数</b>。
         </p>
       </div>
@@ -233,16 +178,6 @@ watch(tab, (t) => {
                   <span class="arrow" :class="{ open: expandedDates.includes(group.date) }">▸</span>
                   <span class="date-text">{{ group.date }}</span>
                   <span class="sub mono-sm">{{ group.papers.length }} 份 · {{ group.questions }} 题</span>
-                  <button
-                    v-if="auth.isAdmin"
-                    class="date-export"
-                    type="button"
-                    title="导出该日期全部答案"
-                    :disabled="exporting"
-                    @click.stop="exportDate(group)"
-                  >
-                    <el-icon><Download /></el-icon>
-                  </button>
                 </header>
                 <button
                   v-for="p in group.papers"
@@ -262,23 +197,14 @@ watch(tab, (t) => {
               </p>
             </aside>
 
-            <section class="answer-pane scroll-area">
+            <section class="answer-pane scroll-area" :class="{ 'has-paper': activePaper }">
               <template v-if="activePaper">
+                <button class="back-btn" type="button" @click="activePaper = null">← 返回列表</button>
                 <div class="answer-head">
                   <div class="answer-title">
                     <h4>{{ activePaper.name }}</h4>
                     <span class="sub">{{ activePaper.batch }} · {{ activePaper.questions }} 题</span>
                   </div>
-                  <el-button
-                    v-if="auth.isAdmin"
-                    type="primary"
-                    size="small"
-                    :icon="Download"
-                    :loading="exporting"
-                    @click="exportCurrent"
-                  >
-                    导出 Markdown
-                  </el-button>
                 </div>
                 <el-skeleton v-if="answersLoading" :rows="6" animated />
                 <ol v-else-if="answers" class="answer-list">
@@ -298,7 +224,7 @@ watch(tab, (t) => {
               </template>
               <div v-else class="pane-empty">
                 <h4>从左侧选择一套试卷</h4>
-                <p>点击即看答案，右上角可导出 Markdown。</p>
+                <p>点击卷子即可查看全部答案。</p>
               </div>
             </section>
           </div>
@@ -338,34 +264,6 @@ watch(tab, (t) => {
             <el-empty v-else description="没有搜到相关题目；等相应卷子被做过一次后，答案会自动进入答案中心" :image-size="72" />
           </template>
           <p v-else class="tip">答案库共 {{ summary.questions || '…' }} 道题可搜。</p>
-        </div>
-      </el-tab-pane>
-
-      <!-- 获取记录 -->
-      <el-tab-pane label="获取记录" name="feed">
-        <div class="pane">
-          <div class="feed-head">
-            <span class="sub">任务里获取到的答案自动记录在这里；「新采集」= 从结果页抓到的最新答案，「复用」= 直接取用了库里已有的答案</span>
-            <el-button :icon="Refresh" text :loading="feedLoading" @click="loadFeed">刷新</el-button>
-          </div>
-          <el-empty
-            v-if="!contributions.length && !feedLoading"
-            description="还没有记录；完成一个任务后，获取到的答案会自动出现在这里"
-            :image-size="72"
-          />
-          <ul v-else class="feed">
-            <li v-for="(item, i) in contributions" :key="i" class="feed-row">
-              <span class="medal"><el-icon><Medal /></el-icon></span>
-              <span class="who">{{ item.username }}</span>
-              <StatusPill :tone="item.source === 'reuse' ? 'info' : 'ok'" :dot="false">
-                {{ item.source === 'reuse' ? '复用' : '新采集' }}
-              </StatusPill>
-              <span class="verb">获取了</span>
-              <span class="paper">{{ item.paper }}</span>
-              <span class="mono-sm sub">{{ item.questions }} 题</span>
-              <span class="when">{{ formatDateTime(item.createdAt) }}</span>
-            </li>
-          </ul>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -493,23 +391,6 @@ watch(tab, (t) => {
 }
 .date-head .sub {
   margin-left: auto;
-}
-.date-export {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink-400);
-  cursor: pointer;
-  font-size: 13px;
-}
-.date-export:hover {
-  background: var(--accent-100);
-  color: var(--accent-700);
 }
 .paper-row {
   display: grid;
@@ -686,60 +567,9 @@ watch(tab, (t) => {
   color: var(--ink-400);
 }
 
-/* —— 获取记录 —— */
-.feed-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.feed {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.feed-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 6px;
-  border-bottom: 1px dashed var(--border);
-  font-size: 13.5px;
-}
-.feed-row:last-child {
-  border-bottom: none;
-}
-.medal {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: var(--accent-100);
-  color: var(--accent-700);
-  font-size: 14px;
-}
-.who {
-  font-weight: 700;
-  color: var(--ink-800);
-}
-.verb {
-  color: var(--ink-400);
-}
-.paper {
-  color: var(--ink-700);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 320px;
-}
-.when {
-  margin-left: auto;
-  flex: none;
-  font-size: 12px;
-  color: var(--ink-300);
+/* 手机端返回按钮：桌面不显示（双栏直接点右侧即可） */
+.back-btn {
+  display: none;
 }
 
 @media (max-width: 768px) {
@@ -754,19 +584,36 @@ watch(tab, (t) => {
     height: auto;
     min-height: 0;
   }
-  .paper-list {
-    max-height: 34vh;
-  }
-  /* 答案面板不内滚：整页顺滑滚动，触屏更跟手 */
+  /* 手机：点卷子 → 答案全屏覆盖显示（带「返回列表」），一屏一件事看得清楚 */
   .answer-pane {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: none;
+    background: var(--surface-1);
+    padding: 14px 14px 28px;
+    overflow-y: auto;
     max-height: none;
-    min-height: 200px;
-    overflow-y: visible;
+    min-height: 0;
   }
-  .date-export {
-    width: 36px;
-    height: 36px;
-    font-size: 16px;
+  .answer-pane.has-paper {
+    display: block;
+  }
+  .back-btn {
+    display: inline-flex;
+    margin-bottom: 10px;
+    border: none;
+    background: transparent;
+    color: var(--accent);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 0;
+  }
+  .answer-list li {
+    padding: 11px 2px;
+  }
+  .answer-value {
+    font-size: 15.5px;
   }
   .hero p {
     display: none;

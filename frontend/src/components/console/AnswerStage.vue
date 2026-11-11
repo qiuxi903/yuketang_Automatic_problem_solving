@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/auth'
 
 const auth = useAuthStore()
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { Download, Refresh } from '@element-plus/icons-vue'
+import { Refresh } from '@element-plus/icons-vue'
 import { getPaperAnswers } from '@/api/paper'
 import { useConsoleStore } from '@/store/console'
 import { countdown, formatClock, relativeTime } from '@/utils/format'
@@ -30,7 +30,7 @@ const remain = computed(() => countdown(store.session?.expireAt, now.value))
 const activePaper = computed(() => props.selectedPaper || task.value?.currentPaper || null)
 const isLivePaper = computed(() => activePaper.value !== null && activePaper.value === task.value?.currentPaper)
 
-/** 任务进入终态后的收尾摘要：完成给导出入口，失败/中断给原因与重开入口。 */
+/** 任务进入终态后的收尾摘要：完成给「结束任务」入口，失败/中断给原因与重开入口。 */
 const finished = computed(() => {
   const t = task.value
   if (!t) return null
@@ -184,16 +184,6 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
               @click="store.endTaskGoHome()"
             >
               结束任务，回到主页
-            </el-button>
-            <el-button
-              v-if="auth.isAdmin"
-              type="primary"
-              :icon="Download"
-              :disabled="task.donePaper <= 0"
-              :loading="store.busy"
-              @click="store.exportAnswers()"
-            >
-              导出答案
             </el-button>
             <el-button @click="store.detach()">再发起一次任务</el-button>
           </div>
@@ -365,7 +355,7 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
         <div class="stage-empty-hints">
           <div class="hint"><b>1</b> 新建任务并扫码</div>
           <div class="hint"><b>2</b> 确认答案库与方式</div>
-          <div class="hint"><b>3</b> 看进度，导出答案</div>
+          <div class="hint"><b>3</b> 看进度，可暂停</div>
         </div>
       </div>
     </div>

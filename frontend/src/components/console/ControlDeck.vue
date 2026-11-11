@@ -18,7 +18,7 @@ const router = useRouter()
 /** 移动端「去勾选卷子」：请外层把分段视图切到试卷页。 */
 const emit = defineEmits<{ goPapers: [] }>()
 
-/** 答案查询统一入口收敛到「答案中心」页（搜索 / 按批次浏览导出 / 获取记录） */
+/** 答案查询统一入口收敛到「答案中心」页（搜索 / 按日期浏览） */
 function goAnswerCenter() {
   void router.push({ name: 'community' })
 }
@@ -331,11 +331,11 @@ defineExpose({
           新建任务，扫码登录雨课堂
         </el-button>
 
-        <!-- 答案查询统一入口：答案中心页（搜索/浏览/导出/获取记录），不再单独弹窗 -->
+        <!-- 答案查询统一入口：答案中心页（搜索/按日期浏览），不再单独弹窗 -->
         <div class="menu-group mobile-hide">
           <span class="eyebrow">不动手做，只想查答案？</span>
           <p class="hint">
-            到「答案中心」搜索或按批次浏览全部答案，可直接导出 Markdown。不建任务、不扫码、不消耗作答次数。
+            到「答案中心」搜索或按日期浏览全部答案。不建任务、不扫码、不消耗作答次数。
           </p>
           <el-button class="full" :icon="Collection" @click="goAnswerCenter">
             前往答案中心
