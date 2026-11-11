@@ -80,6 +80,11 @@ function toggleDate(date: string) {
   else expandedDates.value.push(date)
 }
 
+// 按卷名过滤时自动展开有匹配的日期组（收起状态下过滤结果不可见会像「没反应」）
+watch(paperFilter, (kw) => {
+  if (kw.trim()) expandedDates.value = visibleGroups.value.map((g) => g.date)
+})
+
 const activePaper = ref<PaperRow | null>(null)
 const answers = ref<AnswerPaperEntry | null>(null)
 const answersLoading = ref(false)
@@ -90,8 +95,8 @@ async function loadManifest(force = false) {
   try {
     const result = await listPapers()
     batches.value = result.batches
-    // 默认展开全部日期组（保持「默认显示所有卷子」的口径）
-    expandedDates.value = dateGroups.value.map((g) => g.date)
+    // 所有日期默认收起：用户点日期头手动展开（一屏只看一天，列表短且清爽）
+    expandedDates.value = []
   } catch {
     batches.value = []
   } finally {
@@ -583,6 +588,11 @@ onMounted(() => {
     grid-template-columns: 1fr;
     height: auto;
     min-height: 0;
+  }
+  /* 手机：列表自占一屏内滚（默认收起时只有日期头，展开一天滚一天的内容） */
+  .paper-list {
+    max-height: calc(100vh - 300px);
+    min-height: 200px;
   }
   /* 手机：点卷子 → 答案全屏覆盖显示（带「返回列表」），一屏一件事看得清楚 */
   .answer-pane {
