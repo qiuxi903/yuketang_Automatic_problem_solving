@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { searchAnswers } from '@/api/community'
@@ -81,7 +81,7 @@ function toggleDate(date: string) {
 }
 
 // 按卷名过滤时自动展开有匹配的日期组（收起状态下过滤结果不可见会像「没反应」）
-watch(paperFilter, (kw) => {
+watch(paperFilter, (kw: string) => {
   if (kw.trim()) expandedDates.value = visibleGroups.value.map((g) => g.date)
 })
 
