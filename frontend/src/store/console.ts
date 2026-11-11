@@ -221,8 +221,10 @@ export const useConsoleStore = defineStore('console', () => {
     if (snapshot.donePaper > prev.donePaper) {
       log('ok', `完成第 ${snapshot.donePaper} / ${snapshot.totalPaper} 套试卷`)
     }
-    if (snapshot.message && snapshot.message !== prev.message) {
-      log('info', snapshot.message)
+    // 心跳播报（「…已持续 Ns」每几秒秒数一变）不入事件流：只会把未读红点刷满，没有信息量
+    const msg = snapshot.message ?? ''
+    if (msg && msg !== prev.message && !/已持续 \d+s\s*$/.test(msg)) {
+      log('info', msg)
     }
   }
 
