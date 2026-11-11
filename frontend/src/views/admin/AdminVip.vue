@@ -961,7 +961,7 @@ onMounted(() => void loadTab(activeTab.value))
                   <el-radio-button value="XUNHU">虎皮椒</el-radio-button>
                 </el-radio-group>
                 <p class="form-hint">
-                  监听渠道：用户按「含随机尾数的精确金额」扫码付款，pay-listener 电脑端监听工具自动回调核销；
+                  监听渠道：用户按「精确金额」扫码付款，pay-listener 电脑端监听工具自动回调核销；
                   虎皮椒需在 local.yml 配置 YKT_XUNHU_APPID / YKT_XUNHU_SECRET 后启用。
                 </p>
               </el-form-item>
@@ -1026,7 +1026,7 @@ onMounted(() => void loadTab(activeTab.value))
 
           <div class="panel-card">
             <h4>收款码</h4>
-            <p class="form-hint">上传个人微信/支付宝收款码（静态码即可，用户扫码后手动输入含尾数的金额）。</p>
+            <p class="form-hint">上传个人微信/支付宝收款码（静态码即可，用户扫码后手动输入精确金额）。</p>
             <div class="qr-row">
               <div class="qr-slot">
                 <span class="qr-label">微信</span>

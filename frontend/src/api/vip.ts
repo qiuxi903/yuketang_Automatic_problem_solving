@@ -56,7 +56,7 @@ export interface VipOrder {
   targetBatch: string | null
   originalFen: number
   discountFen: number
-  /** 免签监听用的随机分尾数 */
+  /** 附加分（历史字段，固定金额后恒为 0） */
   suffixFen: number
   payableFen: number
   status: VipOrderStatus

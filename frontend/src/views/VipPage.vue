@@ -128,7 +128,7 @@ const payCountdown = computed(() => countdown(activeOrder.value?.expiresAt ?? nu
 watch(payCountdown, (c) => {
   if (c.expired && payOpen.value && !payResult.value) {
     stopPolling()
-    ElMessage.warning('订单支付窗口已过期：请取消该订单后重新下单（金额尾数会变）')
+    ElMessage.warning('订单支付窗口已过期：请取消该订单后重新下单')
   }
 })
 
@@ -406,7 +406,7 @@ onBeforeUnmount(stopPolling)
         <span class="g-arrow">→</span>
         <div class="guide-step">
           <span class="g-num">2</span>
-          <span class="g-text">扫码支付<b>精确金额</b>（含随机尾数）</span>
+          <span class="g-text">扫码支付<b>精确金额</b></span>
         </div>
         <span class="g-arrow">→</span>
         <div class="guide-step">
@@ -597,7 +597,7 @@ onBeforeUnmount(stopPolling)
       </div>
 
       <div class="tips-strip">
-        <span class="tip-item">💡 支付金额含随机尾数，用于自动对单，请<b>精确输入</b></span>
+        <span class="tip-item">💡 请按显示金额<b>精确输入</b>，用于自动对单</span>
         <span class="tip-item">⏱️ 订单 10 分钟内有效，超时取消后重新下单即可</span>
         <span class="tip-item">🛡️ 重复支付有保护：金额对不上不会误开通，可放心操作</span>
         <span class="tip-item">🎯 取答案与答案下载永远免费，付费仅用于自动做题</span>
@@ -703,7 +703,7 @@ onBeforeUnmount(stopPolling)
             <span>应付</span>
             <strong>¥{{ fen2yuan(activeOrder.payableFen) }}</strong>
             <em v-if="activeOrder.suffixFen > 0">
-              含 {{ (activeOrder.suffixFen / 100).toFixed(2) }} 元随机尾数，用于自动到账识别，请按显示金额精确支付
+              请按显示金额精确支付，用于自动到账识别
             </em>
           </div>
 
@@ -718,7 +718,7 @@ onBeforeUnmount(stopPolling)
                 <figcaption>支付宝</figcaption>
               </figure>
             </div>
-            <p class="pd-qr-tip">任选一码扫码支付，金额务必按上方显示精确输入（含尾数）</p>
+            <p class="pd-qr-tip">任选一码扫码支付，金额务必按上方显示精确输入</p>
           </div>
           <div v-else class="pd-noqr">
             <template v-if="activeOrder.payChannel === 'LISTEN'">

@@ -348,13 +348,12 @@ public class VipService {
         }
 
         int discountFen = Math.round(originalFen * (100 - percent) / 100.0f);
-        // 免签监听靠「精确金额」对单：加 1~99 分随机尾数把订单区分开；人工/虎皮椒不加
+        // 金额固定（不加随机尾数）：应付价 = 应付价 − 折扣；对单按 payableFen 精确匹配
         String channel = settings.getPayChannel();
         if (VipOrder.CHANNEL_XUNHU.equals(channel) && (properties.xunhuAppid() == null || properties.xunhuAppid().isBlank())) {
             log.warn("虎皮椒渠道未配置 appid，订单回落人工确认渠道");
             channel = VipOrder.CHANNEL_MANUAL;
         }
-        int suffixFen = VipOrder.CHANNEL_LISTEN.equals(channel) ? 1 + RANDOM.nextInt(99) : 0;
 
         VipOrder order = new VipOrder();
         order.setOrderNo("VIP" + Long.toString(System.currentTimeMillis(), 36).toUpperCase() + randomToken(4));
@@ -363,8 +362,8 @@ public class VipService {
         order.setTargetBatch(targetBatch);
         order.setOriginalFen(originalFen);
         order.setDiscountFen(discountFen);
-        order.setSuffixFen(suffixFen);
-        order.setPayableFen(originalFen - discountFen + suffixFen);
+        order.setSuffixFen(0);
+        order.setPayableFen(originalFen - discountFen);
         order.setStatus(VipOrder.STATUS_CREATED);
         order.setPayChannel(channel);
         order.setCouponCode(appliedCoupon);
