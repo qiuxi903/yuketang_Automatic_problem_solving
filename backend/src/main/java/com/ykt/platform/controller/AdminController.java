@@ -4,10 +4,13 @@ import com.ykt.platform.dto.AdminOverviewResponse;
 import com.ykt.platform.dto.AdminTaskView;
 import com.ykt.platform.dto.AdminTaskView;
 import com.ykt.platform.dto.AdminUserView;
+import com.ykt.platform.dto.ImportResult;
+import com.ykt.platform.dto.ImportRow;
 import com.ykt.platform.entity.LoginLog;
 import com.ykt.platform.dto.TaskSnapshot;
 import com.ykt.platform.dto.UpdateUserRoleRequest;
 import com.ykt.platform.service.AdminService;
+import com.ykt.platform.service.AuthService;
 import com.ykt.platform.service.TaskService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,14 +31,23 @@ public class AdminController {
     private final TaskService taskService;
     private final com.ykt.platform.service.BackupService backupService;
     private final com.ykt.platform.service.AdminAuditService auditService;
+    private final AuthService authService;
 
     public AdminController(AdminService adminService, TaskService taskService,
                            com.ykt.platform.service.BackupService backupService,
-                           com.ykt.platform.service.AdminAuditService auditService) {
+                           com.ykt.platform.service.AdminAuditService auditService,
+                           AuthService authService) {
         this.adminService = adminService;
         this.taskService = taskService;
         this.backupService = backupService;
         this.auditService = auditService;
+        this.authService = authService;
+    }
+
+    /** 批量导入账号：Excel 解析后的用户名/密码清单，逐条创建（免邀请码），返回每条结果。 */
+    @PostMapping("/users/import")
+    public List<ImportResult> importUsers(@RequestBody List<ImportRow> rows) {
+        return authService.importUsers(rows);
     }
 
     /** 手动触发一次 H2 在线备份（每日 03:00 也会自动备份，保留 7 份）。 */
