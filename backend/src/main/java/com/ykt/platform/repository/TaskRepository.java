@@ -4,6 +4,7 @@ import com.ykt.platform.entity.Task;
 import com.ykt.platform.entity.TaskStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -19,4 +20,8 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     Optional<Task> findFirstByStatusOrderByIdAsc(TaskStatus status);
 
     List<Task> findByUserIdAndStatusIn(Long userId, Collection<TaskStatus> statuses);
+
+    List<Task> findByStatusInAndFinishedAtBefore(Collection<TaskStatus> statuses, Instant before);
+
+    List<Task> findByStatusInAndFinishedAtNull(Collection<TaskStatus> statuses);
 }

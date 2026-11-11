@@ -33,6 +33,7 @@ import com.ykt.platform.ws.TaskWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -235,6 +236,7 @@ public class TaskService {
         }
         taskQueue.remove(id);
         task.setStatus(TaskStatus.CANCELLED);
+        task.setFinishedAt(Instant.now());
         task.setMessage("任务已被用户中断");
         taskRepository.save(task);
         broadcast(id);
@@ -254,6 +256,28 @@ public class TaskService {
         taskRepository.delete(task);
         // 任务已不存在，无法再广播快照；前端按删除结果在本地任务列表剔除
         return OkResponse.of();
+    }
+
+    /** 终态任务空闲回收：结束 1 小时后自动删除（含明细），保证用户下次打开都从「扫码登录」开始。 */
+    @Scheduled(fixedDelay = 600_000, initialDelay = 120_000)
+    @Transactional
+    public void purgeStaleFinishedTasks() {
+        Instant cutoff = Instant.now().minusSeconds(3600);
+        List<Task> stale = taskRepository.findByStatusInAndFinishedAtBefore(
+                List.of(TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELLED), cutoff);
+        // 历史数据兜底：字段上线前的终态任务没有 finishedAt，按创建时间判定
+        for (Task task : taskRepository.findByStatusInAndFinishedAtNull(
+                List.of(TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELLED))) {
+            if (task.getCreatedAt().isBefore(cutoff)) {
+                stale.add(task);
+            }
+        }
+        for (Task task : stale) {
+            taskQueue.remove(task.getId());
+            frameCache.remove(task.getId());
+            taskItemRepository.deleteAll(taskItemRepository.findByTaskIdOrderByIdAsc(task.getId()));
+            taskRepository.delete(task);
+        }
     }
 
     /** 当前登录用户是否管理员（取答案仅管理员开放的判定用）。 */
@@ -542,6 +566,7 @@ public class TaskService {
             return OkResponse.of();
         }
         task.setStatus(reported);
+        task.setFinishedAt(Instant.now());
         if (request.score() != null && !request.score().isBlank()) {
             task.setScore(request.score());
         }

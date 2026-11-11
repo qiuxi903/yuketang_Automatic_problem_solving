@@ -73,6 +73,9 @@ public class Task {
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
+    /** 任务进入终态（SUCCESS/FAILED/CANCELLED）的时间；终态空闲回收以此为基准。 */
+    private Instant finishedAt;
+
     public Long getId() {
         return id;
     }
@@ -215,5 +218,13 @@ public class Task {
 
     public void setCreatedAt(Instant createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public Instant getFinishedAt() {
+        return finishedAt;
+    }
+
+    public void setFinishedAt(Instant finishedAt) {
+        this.finishedAt = finishedAt;
     }
 }
