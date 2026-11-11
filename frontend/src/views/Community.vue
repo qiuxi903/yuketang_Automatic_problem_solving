@@ -590,7 +590,7 @@ onMounted(() => {
     inset: 0;
     z-index: 40;
     display: none;
-    background: var(--surface-1);
+    background: var(--bg, #f3f6fb); /* 必须不透明：半透明会透出下层的日期与列表 */
     padding: 14px 14px 28px;
     overflow-y: auto;
     max-height: none;
