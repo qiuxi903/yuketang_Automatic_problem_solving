@@ -60,7 +60,7 @@ const registerRules: FormRules = {
 const steps = [
   { icon: Camera, title: '发起任务并扫码', desc: 'Agent 自动打开雨课堂登录页，二维码过期会自动刷新' },
   { icon: Connection, title: '实时自动作答', desc: '答案库命中即作答，未命中回退到兜底 API' },
-  { icon: Postcard, title: '导出作答结果', desc: '试卷得分与答案记录一键导出，全程可视化' },
+  { icon: Postcard, title: '查看作答结果', desc: '试卷得分与答案记录随时查看，全程可视化' },
 ]
 
 /* —— 邀请链接直达：/login?invite=CODE 自动切注册并填码，同时校验有效性 —— */
