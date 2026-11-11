@@ -596,13 +596,6 @@ onBeforeUnmount(stopPolling)
         </div>
       </div>
 
-      <div class="tips-strip">
-        <span class="tip-item">💡 请按显示金额<b>精确输入</b>，用于自动对单</span>
-        <span class="tip-item">⏱️ 订单 10 分钟内有效，超时取消后重新下单即可</span>
-        <span class="tip-item">🛡️ 重复支付有保护：金额对不上不会误开通，可放心操作</span>
-        <span class="tip-item">🎯 取答案与答案下载永远免费，付费仅用于自动做题</span>
-      </div>
-
       <!-- 订单记录 -->
       <div v-if="orders.length" class="orders">
         <h4 class="orders-title">我的订单</h4>
@@ -1049,23 +1042,11 @@ export default { name: 'VipPage' }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tips-strip {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 18px;
-  margin-top: 18px;
-  padding: 14px 18px;
-  background: var(--surface-2);
-  border: 1px dashed var(--border);
-  border-radius: var(--r-lg);
-}
 .tip-item {
-  font-size: 12.5px;
-  line-height: 1.7;
-  color: var(--ink-500);
+  display: none;
 }
 .tip-item b {
-  color: var(--ink-800);
+  display: none;
 }
 
 /* —— 优惠码 / 兑换（panel-card 与管理后台同款） —— */
@@ -1329,9 +1310,6 @@ export default { name: 'VipPage' }
   }
   .me-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .tips-strip {
-    grid-template-columns: 1fr;
   }
   .guide-strip {
     font-size: 12.5px;
