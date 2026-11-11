@@ -451,6 +451,21 @@ function handleLogout() {
   .shell-body {
     padding-bottom: 0;
   }
+  /* 手机端放开高度锁：页面内容撑开文档流、由 body 原生滚动——
+     内滚容器 + grid + fixed 子元素在手机 Chrome 上滚动合成层易撕裂重影 */
+  .console-shell {
+    height: auto;
+    min-height: 100%;
+  }
+  .shell-body {
+    overflow: visible;
+  }
+  .shell-body > :deep(*) {
+    flex: none;
+    /* 页面根不可被内容的 min-content 撑破视口（横向溢出的总闸） */
+    min-width: 0;
+    max-width: 100%;
+  }
   .tabbar {
     display: flex;
     align-items: stretch;

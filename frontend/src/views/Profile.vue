@@ -374,9 +374,14 @@ export default { name: 'ProfilePage' }
 @media (max-width: 768px) {
   .profile {
     padding: 16px 14px 34px;
+    /* 手机端走文档流滚动：横向交给 overflow-x 兜底裁剪，内容 min-width 归零防撑破 */
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   .grid {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr)：1fr 的 auto 最小值会被表单内容撑破视口（横向溢出） */
+    grid-template-columns: minmax(0, 1fr);
   }
   .page-head {
     flex-direction: column;
