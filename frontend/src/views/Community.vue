@@ -583,16 +583,18 @@ onMounted(() => {
   }
   .tabs {
     padding: 4px 10px 12px;
+    min-height: 0;
   }
   .papers-body {
     grid-template-columns: 1fr;
     height: auto;
     min-height: 0;
   }
-  /* 手机：列表自占一屏内滚（默认收起时只有日期头，展开一天滚一天的内容） */
+  /* 手机：不做任何列表内滚——整页自然滚动（原生手感），展开一天内容变高整页跟着滚 */
   .paper-list {
-    max-height: calc(100vh - 300px);
-    min-height: 200px;
+    max-height: none;
+    min-height: 0;
+    overflow-y: visible;
   }
   /* 手机：点卷子 → 答案全屏覆盖显示（带「返回列表」），一屏一件事看得清楚 */
   .answer-pane {
