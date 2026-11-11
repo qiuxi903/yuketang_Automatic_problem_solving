@@ -4,13 +4,17 @@ import com.ykt.platform.dto.AdminOverviewResponse;
 import com.ykt.platform.dto.AdminTaskView;
 import com.ykt.platform.dto.AdminTaskView;
 import com.ykt.platform.dto.AdminUserView;
+import com.ykt.platform.dto.ImportResult;
+import com.ykt.platform.dto.ImportRow;
 import com.ykt.platform.entity.LoginLog;
 import com.ykt.platform.dto.TaskSnapshot;
 import com.ykt.platform.dto.UpdateUserRoleRequest;
 import com.ykt.platform.service.AdminService;
+import com.ykt.platform.service.AuthService;
 import com.ykt.platform.service.TaskService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,10 +29,18 @@ public class AdminController {
 
     private final AdminService adminService;
     private final TaskService taskService;
+    private final AuthService authService;
 
-    public AdminController(AdminService adminService, TaskService taskService) {
+    public AdminController(AdminService adminService, TaskService taskService, AuthService authService) {
         this.adminService = adminService;
         this.taskService = taskService;
+        this.authService = authService;
+    }
+
+    /** 批量导入账号：Excel 解析后的用户名/密码清单，逐条创建（免邀请码），返回每条结果。 */
+    @PostMapping("/users/import")
+    public List<ImportResult> importUsers(@RequestBody List<ImportRow> rows) {
+        return authService.importUsers(rows);
     }
 
     @GetMapping("/overview")

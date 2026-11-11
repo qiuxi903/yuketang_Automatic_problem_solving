@@ -2,6 +2,8 @@ package com.ykt.platform.service;
 
 import com.ykt.platform.dto.ChangePasswordRequest;
 import com.ykt.platform.dto.ChangeUsernameRequest;
+import com.ykt.platform.dto.ImportResult;
+import com.ykt.platform.dto.ImportRow;
 import com.ykt.platform.dto.LoginRequest;
 import com.ykt.platform.dto.MeResponse;
 import com.ykt.platform.dto.SetAvatarRequest;
@@ -89,6 +91,46 @@ public class AuthService {
         // VIP：注册即建 VIP 账户并赠送免费体验额度（次数 = ykt.vip.free-quota-on-register）
         vipService.account(saved.getId());
         return new RegisterResponse(saved.getId(), saved.getUsername());
+    }
+
+    /** 管理员批量导入账号：免邀请码，逐条校验并创建（VIP 账户与注册同权赠送），返回每条结果。 */
+    @Transactional
+    public List<ImportResult> importUsers(List<ImportRow> rows) {
+        List<ImportResult> results = new java.util.ArrayList<>();
+        for (ImportRow row : rows == null ? List.<ImportRow>of() : rows) {
+            String username = row.username() == null ? "" : row.username().trim();
+            String password = row.password() == null ? "" : row.password();
+            try {
+                if (userRepository.existsByUsername(username)) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
+                }
+                if (!USERNAME_RE.matcher(username).matches()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "用户名需 3-20 位，只能包含中文、字母、数字或下划线");
+                }
+                if (username.matches("\\d+")) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字");
+                }
+                if (password.length() < 8) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码至少 8 位");
+                }
+                if (!password.matches("(?=.*[A-Za-z])(?=.*\\d).+")) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码需同时包含字母和数字");
+                }
+                User user = new User();
+                user.setUsername(username);
+                user.setPasswordHash(passwordEncoder.encode(password));
+                user.setRole("USER");
+                User saved = userRepository.save(user);
+                vipService.account(saved.getId());
+                results.add(new ImportResult(saved.getUsername(), true, "导入成功"));
+            } catch (ResponseStatusException ex) {
+                results.add(new ImportResult(username, false, ex.getReason()));
+            } catch (Exception ex) {
+                results.add(new ImportResult(username, false, "导入失败"));
+            }
+        }
+        return results;
     }
 
     public LoginResponse login(LoginRequest request) {

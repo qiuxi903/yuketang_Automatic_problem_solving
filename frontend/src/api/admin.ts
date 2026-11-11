@@ -12,6 +12,22 @@ export function listUsers() {
   return client.get<unknown, AdminUserView[]>('/admin/users')
 }
 
+export interface ImportRow {
+  username: string
+  password: string
+}
+
+export interface ImportResult {
+  username: string
+  ok: boolean
+  reason: string
+}
+
+/** 批量导入账号：逐条创建（免邀请码），返回每条结果（用户名重复/格式不符等）。 */
+export function importUsers(rows: ImportRow[]) {
+  return client.post<unknown, ImportResult[]>('/admin/users/import', rows)
+}
+
 export function updateUserRole(id: number, role: UserRole) {
   return client.put<unknown, AdminUserView>(`/admin/users/${id}/role`, { role })
 }

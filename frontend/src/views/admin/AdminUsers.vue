@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search } from '@element-plus/icons-vue'
+import { Download, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import {
   getUserLoginLogs,
   getUserOrders,
   getUserTasks,
+  importUsers,
   listUsers,
   resetUserPassword,
   setUserDisabled,
@@ -27,6 +29,78 @@ const rows = ref<AdminUserView[]>([])
 const keyword = ref('')
 const roleFilter = ref<'ALL' | UserRole>('ALL')
 const statusFilter = ref<'ALL' | 'OK' | 'DISABLED'>('ALL')
+
+/** 批量导入：Excel（A 列用户名 / B 列密码，首行表头自动跳过）→ 确认 → 导入 → 报告 */
+const importInput = ref<HTMLInputElement | null>(null)
+const importBusy = ref(false)
+
+function downloadImportTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['用户名', '密码'],
+    ['张三01', 'Abc12345'],
+    ['lisi02', 'Xy9876abc'],
+  ])
+  ws['!cols'] = [{ wch: 20 }, { wch: 24 }]
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '账号')
+  XLSX.writeFile(wb, '账号导入模板.xlsx')
+  ElMessage.success('模板已下载：按模板填写后上传导入')
+}
+
+async function onImportFile(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = '' // 允许重复选择同一文件
+  if (!file) return
+  let rows: { username: string; password: string }[]
+  try {
+    const buf = await file.arrayBuffer()
+    const wb = XLSX.read(buf, { type: 'array' })
+    const sheet = wb.Sheets[wb.SheetNames[0]]
+    const grid = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, blankrows: false })
+    rows = []
+    for (const cells of grid) {
+      const a = String(cells?.[0] ?? '').trim()
+      const b = String(cells?.[1] ?? '').trim()
+      if (!a && !b) continue
+      if (a === '用户名' && b === '密码') continue // 表头
+      rows.push({ username: a, password: b })
+    }
+  } catch {
+    ElMessage.error('Excel 解析失败：请用「下载模板」提供的格式填写')
+    return
+  }
+  if (!rows.length) {
+    ElMessage.warning('没有解析到账号行（A 列用户名 / B 列密码）')
+    return
+  }
+  try {
+    const preview = rows.slice(0, 5).map((r) => r.username).join('、')
+    await ElMessageBox.confirm(
+      `解析到 ${rows.length} 个账号：${preview}${rows.length > 5 ? ' 等' : ''}。确认导入？`,
+      '批量导入账号',
+      { confirmButtonText: '开始导入', cancelButtonText: '取消', type: 'info' },
+    )
+  } catch {
+    return // 用户取消
+  }
+  importBusy.value = true
+  try {
+    const results = await importUsers(rows)
+    const ok = results.filter((r) => r.ok).length
+    const fails = results.filter((r) => !r.ok)
+    const failText = fails.slice(0, 8).map((f) => `${f.username}：${f.reason}`).join('；')
+    await ElMessageBox.alert(
+      `成功 ${ok} 个，失败 ${fails.length} 个。` +
+        (fails.length ? `失败明细：${failText}${fails.length > 8 ? '…' : ''}` : '全部导入成功。'),
+      '导入完成',
+      { confirmButtonText: '知道了' },
+    )
+    await load()
+  } finally {
+    importBusy.value = false
+  }
+}
 
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
@@ -186,6 +260,15 @@ onMounted(load)
           <el-radio-button value="OK">正常</el-radio-button>
           <el-radio-button value="DISABLED">已封禁</el-radio-button>
         </el-radio-group>
+        <el-button :icon="Download" :disabled="importBusy" @click="downloadImportTemplate">下载模板</el-button>
+        <el-button type="primary" :icon="Upload" :loading="importBusy" @click="importInput?.click()">批量导入</el-button>
+        <input
+          ref="importInput"
+          type="file"
+          accept=".xlsx,.xls"
+          style="display: none"
+          @change="onImportFile"
+        />
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </div>
     </header>
