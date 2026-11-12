@@ -16,6 +16,9 @@ export default defineConfig({
   server: {
     // 内网穿透对外开放：监听全部网卡 + 放行隧道域名 Host
     host: true,
+    // 项目在 G: 盘（可移动/非系统盘）上 chokidar 事件监听经常失效，
+    // 改用轮询保证源码修改能触发热更（dev 模式必备）
+    watch: { usePolling: true, interval: 500 },
     allowedHosts: true,
     port: 25173,
     proxy: {
