@@ -101,21 +101,12 @@ public class AuthService {
             String username = row.username() == null ? "" : row.username().trim();
             String password = row.password() == null ? "" : row.password();
             try {
+                // 导入不限制用户名/密码的格式与长度（只有注册限制）；硬约束仅两条：不能为空、不能重名
+                if (username.isEmpty() || password.isEmpty()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名或密码为空");
+                }
                 if (userRepository.existsByUsername(username)) {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "用户名已存在");
-                }
-                if (!USERNAME_RE.matcher(username).matches()) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                            "用户名需 3-20 位，只能包含中文、字母、数字或下划线");
-                }
-                if (username.matches("\\d+")) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "用户名不能是纯数字");
-                }
-                if (password.length() < 8) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码至少 8 位");
-                }
-                if (!password.matches("(?=.*[A-Za-z])(?=.*\\d).+")) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "密码需同时包含字母和数字");
                 }
                 User user = new User();
                 user.setUsername(username);
