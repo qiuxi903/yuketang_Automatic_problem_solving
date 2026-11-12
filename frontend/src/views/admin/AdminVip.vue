@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { CopyDocument, Delete, Refresh } from '@element-plus/icons-vue'
-import { listUsers, listAuditLogs } from '@/api/admin'
+import { grantAllUsers, listUsers, listAuditLogs } from '@/api/admin'
 import type { AdminUserView } from '@/types'
 import {
   batchVipCoupons,
