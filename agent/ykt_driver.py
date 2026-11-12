@@ -251,7 +251,14 @@ class Driver:
         - 应用壳 + 账号名同时存在且稳定 ≥1s → 已登录 → 不截图
         - 超时仍无法确认已登录 → 一律截图（宁可多显示一次二维码，也不能让用户干等）
         """
-        self.page.goto(config.YKT_INDEX, wait_until="domcontentloaded")
+        try:
+            self.page.goto(config.YKT_INDEX, wait_until="domcontentloaded")
+        except Exception as exc:
+            # 入口页会被雨课堂立即重定向到登录页（next=/v2/web/index），重定向与 goto
+            # 竞态时 Playwright 抛 "interrupted by another navigation"——重定向本身
+            # 正是我们想要的登录页，忽略后继续走下方的登录态判定即可
+            log.info("入口页导航被站内重定向打断（属正常跳转，忽略）：%s", exc)
+        self.page.wait_for_timeout(1200)
         deadline = time.time() + 10
         logged_seen_at = 0.0
         while time.time() < deadline:
