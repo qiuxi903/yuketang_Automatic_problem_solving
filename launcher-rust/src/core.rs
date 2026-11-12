@@ -92,14 +92,15 @@ impl Core {
 fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
     let (base, span) = {
         let c = core.lock().unwrap();
-        (c.states[key].port.or(SERVICES[key].base_port), SERVICES[key].port_span)
+        (SERVICES[key].base_port, SERVICES[key].port_span)
     };
     let base = base?;
 
+    // 基准端口永远第一候选：占用者一律腾位（见 free_port），端口永不漂移——
+    // 内网穿透隧道/收藏夹/Agent 地址全部依赖标准端口不变；「上次换过的口优先复用」已移除。
+    // 基准口 bind 失败且无监听者（系统保留区间，杀无可杀）才向后扫描。
     let mut candidates: Vec<u16> = Vec::new();
-    if base > SERVICES[key].base_port.unwrap_or(base) {
-        candidates.push(base); // 上次换过的端口优先复用
-    }
+    candidates.push(base);
     for p in base..=base.saturating_add(span) {
         candidates.push(p);
     }
