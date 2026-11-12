@@ -581,6 +581,12 @@ onMounted(() => {
   .center {
     padding: 14px 12px 28px;
   }
+  .center {
+    /* 手机端走文档流原生滚动（body 滚），不用内滚容器 */
+    overflow-y: visible;
+    height: auto;
+    min-height: 0;
+  }
   .tabs {
     padding: 4px 10px 12px;
     min-height: 0;
