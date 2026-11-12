@@ -346,6 +346,21 @@ onMounted(async () => {
   .workspace {
     grid-template-columns: 1fr;
   }
+  /* 手机端整页文档流滚动：放开三栏工作台的高度锁与裁剪，面板顺序堆叠、内容全部可见可滚 */
+  .console-page {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .workspace {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    flex: none;
+    min-height: 0;
+    overflow: visible;
+  }
   .is-hidden-mobile {
     display: none;
   }
