@@ -180,6 +180,7 @@ async function startChecked(mode: TaskMode) {
           >
             确认做「{{ store.selectedBatch || '…' }}」
           </button>
+          <button class="bq-abort" type="button" @click="store.endTaskGoHome()">放弃本次任务</button>
         </div>
       </template>
       <span v-else class="batch muted">登录后确认答案库</span>
@@ -728,5 +729,16 @@ async function startChecked(mode: TaskMode) {
 .bq-go:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.bq-abort {
+  width: 100%;
+  margin-top: 2px;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-400);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
 }
 </style>

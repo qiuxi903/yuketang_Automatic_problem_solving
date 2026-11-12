@@ -447,6 +447,9 @@ defineExpose({
             没勾选就直接点的话，会处理所选批次的全部卷子，外加账号里未入答案库的新卷子
             （新卷子用兜底 API 作答，交卷后答案自动入库）。
           </p>
+          <el-button class="full" text type="danger" @click="store.endTaskGoHome()">
+            放弃本次任务，回到主页
+          </el-button>
         </div>
       </template>
 
