@@ -60,7 +60,7 @@ ykt:
     # 雨课堂账号 1:1 绑定开关：false 时扫码登录不做绑定校验
     bind-required: true
     # 新用户注册赠送的免费解锁次数（存量用户启动时按同值补建）
-    free-quota-on-register: 1
+    free-quota-on-register: 0
     # 虎皮椒个人支付接口凭据：填入 local.yml 或环境变量后，后台把收款渠道切到 XUNHU 即启用
     xunhu-appid: "${YKT_XUNHU_APPID:}"
     xunhu-secret: "${YKT_XUNHU_SECRET:}"
