@@ -12,8 +12,12 @@ import com.ykt.platform.dto.VipPayNotificationView;
 import com.ykt.platform.dto.VipSettingsUpdateRequest;
 import com.ykt.platform.dto.VipSettingsView;
 import com.ykt.platform.dto.VipStatsResponse;
+import com.ykt.platform.entity.AdminAuditLog;
+import com.ykt.platform.entity.User;
 import com.ykt.platform.entity.VipActivity;
+import com.ykt.platform.repository.UserRepository;
 import com.ykt.platform.security.SecurityUtil;
+import com.ykt.platform.service.AdminAuditService;
 import com.ykt.platform.service.VipAdminService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,9 +41,43 @@ import java.util.Map;
 public class AdminVipController {
 
     private final VipAdminService adminService;
+    private final AdminAuditService auditService;
+    private final UserRepository userRepository;
 
-    public AdminVipController(VipAdminService adminService) {
+    public AdminVipController(VipAdminService adminService, AdminAuditService auditService,
+                              UserRepository userRepository) {
         this.adminService = adminService;
+        this.auditService = auditService;
+        this.userRepository = userRepository;
+    }
+
+    /** 最近管理操作审计（VIP 运营页展示）。 */
+    @GetMapping("/audit-logs")
+    public List<AdminAuditLog> auditLogs(@RequestParam(defaultValue = "100") int limit) {
+        return auditService.recent(limit);
+    }
+
+    /** 批量发放：向全部普通用户（排除管理员）发放同一权益，逐人容错。 */
+    @PostMapping("/users/grant-all")
+    public Map<String, Object> grantAll(@RequestBody VipGrantRequest request) {
+        Long adminId = SecurityUtil.currentUserId();
+        int total = 0;
+        int ok = 0;
+        int failed = 0;
+        for (User user : userRepository.findAll()) {
+            if ("ADMIN".equalsIgnoreCase(user.getRole())) {
+                continue; // 管理员自身不需要权益
+            }
+            total++;
+            try {
+                adminService.grant(user.getId(), request, adminId);
+                ok++;
+            } catch (Exception ex) {
+                failed++;
+            }
+        }
+        return Map.of("total", total, "ok", ok, "failed", failed,
+                "message", "已向 " + ok + " / " + total + " 个用户发放");
     }
 
     // ---------- 订单 ----------

@@ -144,5 +144,18 @@ export interface AuditLogView {
 
 /** 最近管理操作审计（谁/何时/对谁/做了什么/IP）。 */
 export function listAuditLogs(limit = 100) {
-  return client.get<unknown, AuditLogView[]>('/admin/audit-logs', { params: { limit } })
+  return client.get<unknown, AuditLogView[]>('/admin/vip/audit-logs', { params: { limit } })
+}
+
+/** 批量发放：向全部普通用户（排除管理员）发放同一权益，逐人容错。 */
+export function grantAllUsers(payload: {
+  kind: 'MONTH' | 'DATE' | 'QUOTA'
+  days?: number
+  targetBatch?: string
+  quota?: number
+}) {
+  return client.post<unknown, { total: number; ok: number; failed: number; message: string }>(
+    '/admin/vip/users/grant-all',
+    payload,
+  )
 }

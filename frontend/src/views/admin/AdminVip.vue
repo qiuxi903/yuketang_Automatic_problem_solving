@@ -520,6 +520,7 @@ const batches = ref<string[]>([])
 const usersLoading = ref(false)
 const auditLogs = ref<import('@/api/admin').AuditLogView[]>([])
 const grantForm = ref({
+  scope: 'one' as 'one' | 'all',
   userId: null as number | null,
   kind: 'MONTH' as 'MONTH' | 'DATE' | 'QUOTA',
   days: 30,
@@ -530,18 +531,18 @@ const grantForm = ref({
 async function loadUsers() {
   usersLoading.value = true
   try {
-    const [u, e, b, p, audits] = await Promise.all([
+    const [u, e, b, p, audits] = await Promise.allSettled([
       listUsers(),
       listVipEntitlements(),
       listVipBindings(),
       getVipProducts(),
       listAuditLogs(100),
     ])
-    users.value = u
-    entitlements.value = e
-    bindings.value = b
-    batches.value = p.batches.map((x) => x.batch)
-    auditLogs.value = audits
+    if (u.status === 'fulfilled') users.value = u.value
+    if (e.status === 'fulfilled') entitlements.value = e.value
+    if (b.status === 'fulfilled') bindings.value = b.value
+    if (p.status === 'fulfilled') batches.value = p.value.batches.map((x) => x.batch)
+    if (audits.status === 'fulfilled') auditLogs.value = audits.value
   } finally {
     usersLoading.value = false
   }
@@ -549,6 +550,34 @@ async function loadUsers() {
 
 async function doGrant() {
   const f = grantForm.value
+  const payload = {
+    kind: f.kind,
+    days: f.kind === 'MONTH' ? f.days : undefined,
+    targetBatch: f.kind === 'DATE' ? f.targetBatch : undefined,
+    quota: f.kind === 'QUOTA' ? f.quota : undefined,
+  }
+
+  // 批量模式：向全部普通用户发放同一权益（正加负减同样适用），逐人容错
+  if (f.scope === 'all') {
+    if (f.kind === 'QUOTA' && (f.quota ?? 0) === 0) {
+      ElMessage.warning('额度变化为 0，没有实际效果')
+      return
+    }
+    try {
+      await ElMessageBox.confirm(
+        '将向全部普通用户（不含管理员）发放该权益，确认执行？',
+        '批量发放',
+        { confirmButtonText: '确认发放', cancelButtonText: '取消', type: 'warning' },
+      )
+    } catch {
+      return
+    }
+    const res = await grantAllUsers(payload)
+    ElMessage.success(res.message || '批量发放完成')
+    await loadUsers()
+    return
+  }
+
   if (!f.userId) {
     ElMessage.warning('请选择用户')
     return
@@ -558,12 +587,7 @@ async function doGrant() {
     return
   }
   try {
-    const res = await grantVip(f.userId, {
-      kind: f.kind,
-      days: f.kind === 'MONTH' ? f.days : undefined,
-      targetBatch: f.kind === 'DATE' ? f.targetBatch : undefined,
-      quota: f.kind === 'QUOTA' ? f.quota : undefined,
-    })
+    const res = await grantVip(f.userId, payload)
     ElMessage.success(res.message || '已发放')
     await loadUsers()
   } catch {
@@ -1128,7 +1152,13 @@ onMounted(() => void loadTab(activeTab.value))
           <div class="panel-card">
             <h4>发放权益</h4>
             <el-form label-position="top">
-              <el-form-item label="用户">
+              <el-form-item label="作用范围">
+                <el-radio-group v-model="grantForm.scope">
+                  <el-radio-button value="one">单个用户</el-radio-button>
+                  <el-radio-button value="all">全部普通用户</el-radio-button>
+                </el-radio-group>
+              </el-form-item>
+              <el-form-item v-if="grantForm.scope === 'one'" label="用户">
                 <el-select v-model="grantForm.userId" filterable placeholder="选择用户" class="w-full">
                   <el-option
                     v-for="u in users"
@@ -1156,7 +1186,13 @@ onMounted(() => void loadTab(activeTab.value))
               <el-form-item v-if="grantForm.kind === 'QUOTA'" label="额度变化（可为负）">
                 <el-input-number v-model="grantForm.quota" :min="-999" :max="999" />
               </el-form-item>
-              <el-button type="primary" :loading="usersLoading" @click="doGrant">发放</el-button>
+              <el-button
+                type="primary"
+                :loading="usersLoading"
+                @click="doGrant"
+              >
+                {{ grantForm.scope === 'all' ? '向全部普通用户发放' : '发放' }}
+              </el-button>
             </el-form>
           </div>
 
