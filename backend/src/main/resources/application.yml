@@ -1,5 +1,7 @@
 server:
   port: 28080
+  # 只监听本机回环：局域网设备一律经前端(25173)代理访问，无法直连后端 API 绕过限流/鉴权
+  address: 127.0.0.1
   error:
     # 业务异常（ResponseStatusException）的 reason 需随响应体回传前端，否则前端只能提示「Request failed with status code 4xx」
     include-message: always
