@@ -26,7 +26,6 @@ const rules: FormRules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 64, message: '密码长度为 6-64 位', trigger: 'blur' },
   ],
 }
 
