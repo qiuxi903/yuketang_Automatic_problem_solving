@@ -746,6 +746,20 @@ class Driver:
             pass
         return "unknown"
 
+    def has_entry_button(self):
+        """详情页是否还有作答入口（开始答题/再次答题/继续答题）。
+
+        已交卷且作答次数用完的卷子只剩 查看试卷/查看答案 类入口——
+        没有作答入口就再也无法重做，硬点只会报「未找到开始答题按钮」。
+        """
+        try:
+            for text in PAPER_ENTRY_TEXTS:
+                if self.page.get_by_text(text, exact=True).count():
+                    return True
+        except Exception:
+            pass
+        return False
+
     def _find_question_page(self):
         """在当前标签页及上下文里找「有题目块」的页面（开始按钮可能另开标签页）。"""
         try:

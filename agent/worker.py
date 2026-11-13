@@ -835,6 +835,18 @@ class Worker:
                     task_id, name, exam_id, status="ANSWERING",
                     message="已交卷但 0 分（空白卷）：自动重做一遍争取得分")
 
+            # 已交卷（含重做清单强制重做 / 0 分空白卷自动重做）但详情页已无作答入口
+            # = 作答次数用完，重做必失败：硬闯会抛「未找到开始答题按钮」并被反复重派、无限报错。
+            # 改走与「规则1 已交卷」相同的只读结果页采集，把正确答案收进答案库（不消耗作答次数）。
+            if state == "done" and not driver.has_entry_button():
+                log.warning("[%s] %s 已交卷且无 再次答题 入口（作答次数已用完），无法重做；改读结果页采集正确答案",
+                            self.name, name)
+                self.backend.post_progress(
+                    task_id, name, exam_id,
+                    message="已交卷且无剩余作答次数，无法重做；改读结果页采集正确答案入库")
+                ok = self._collect_from_result(driver, task, batch, paper)
+                return "fetched" if ok else "skipped"
+
             if self._abort.is_set():
                 raise AbortTask()  # 用户已暂停/中断：不再进入答题页
             self._stage(task_id, f"{name}：进入答题页")
@@ -908,6 +920,13 @@ class Worker:
                             self.name, name, checked, expected_checked)
                 driver.click_answers(idx)
                 self._push_frame(driver, task_id, force=True)
+                checked = driver.checked_count()
+            if expected_checked > 0 and checked == 0:
+                # 一道都没勾上还硬交卷 = 烧掉作答次数换 0 分空白卷（无法挽回，调考1/调考10 就这么废掉的）。
+                # 不交卷：雨课堂保留半途作答，下次任务可从「继续答题」续作。
+                raise RuntimeError(
+                    "作答未落上页面（勾选 %d/预期 %d）：已保留作答不交卷，避免烧掉作答次数"
+                    % (checked, expected_checked))
 
             # 只有答案库里确有该卷时才做一致性校验（新卷子没有基准答案，校验无意义）
             if self._lib_has_answers(batch, name):
