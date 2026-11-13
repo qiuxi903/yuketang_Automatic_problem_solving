@@ -163,6 +163,9 @@ fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
         }
         let mut c = core.lock().unwrap();
         if c.reserved.contains(&port) {
+            if port == base {
+                base_fail = "被本会话其它启动预留".into();
+            }
             continue; // 本会话其它服务刚预留
         }
         if port != SERVICES[key].base_port.unwrap_or(port) {
@@ -713,6 +716,8 @@ fn stop_one_sync(core: &Arc<Mutex<Core>>, key: usize) {
     }
     if let Some(port) = port {
         kill_port_holder(port);
+        // 手动停止同样释放预留（进程退出的 Exited 事件会兜底，这里立即释放更干净）
+        core.lock().unwrap().reserved.remove(&port);
     }
 }
 
@@ -796,6 +801,10 @@ pub fn handle_exited(core: &Arc<Mutex<Core>>, key: usize, code: Option<i32>) {
     let mut c = core.lock().unwrap();
     c.states[key].pid = None;
     c.states[key].running = false;
+    // 端口预留随进程一起释放：死掉的预留会让下次启动把标准端口当「会话已占用」跳过 → 漂移
+    if let Some(p) = c.states[key].port.take() {
+        c.reserved.remove(&p);
+    }
     if c.states[key].status != "已停止" {
         c.set_status(key, &format!("已退出({})", code.unwrap_or(-1)));
         c.log(key, Some(Level::Danger), format!("进程退出，code={}", code.unwrap_or(-1)));
