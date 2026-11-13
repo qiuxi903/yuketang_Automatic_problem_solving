@@ -608,6 +608,19 @@ async function startChecked(mode: TaskMode) {
 
 /* —— 移动端：放宽间距、加大触控目标（此前这段样式误写在 style 标签外从未生效） —— */
 @media (max-width: 768px) {
+  /* 手机端放开高度压缩链：面板与内滚列表回到自然高度，整页文档流滚动（手机不做列表内滚） */
+  .rail {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .rail-body {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow-y: visible;
+  }
   .rail-head {
     padding: 16px 16px 12px;
   }

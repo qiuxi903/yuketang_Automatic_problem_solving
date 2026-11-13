@@ -809,6 +809,23 @@ defineExpose({
 }
 
 @media (max-width: 768px) {
+  /* 手机端放开高度压缩链：面板与内滚容器回到自然高度，整页文档流滚动（手机不做列表内滚） */
+  .deck {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .feed {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow-y: visible;
+  }
+  .batch-scroll {
+    max-height: none;
+    overflow-y: visible;
+  }
   /* 移动端减负：标题行隐藏（分段标签已表明当前页），状态行只留状态点 */
   .deck-title {
     display: none;
