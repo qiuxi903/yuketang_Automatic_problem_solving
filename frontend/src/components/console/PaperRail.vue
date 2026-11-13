@@ -135,8 +135,9 @@ async function startChecked(mode: TaskMode) {
   } catch {
     return
   }
-  await store.continueTask([...store.selectedPapers], mode as TaskMode)
-  ElMessage.success(`已发起：勾选的 ${n} 套 · ${verb}（登录有效时自动开始）`)
+  const tid = await store.continueTask([...store.selectedPapers], mode as TaskMode)
+  // continueTask 可能因「未选日期/无候选批次」被拦下（返回 null）——此时不能再报成功
+  if (tid) ElMessage.success(`已发起：勾选的 ${n} 套 · ${verb}（登录有效时自动开始）`)
 }
 </script>
 
