@@ -1,8 +1,20 @@
 # 交接说明（HANDOFF）· VIP 分支
 
 > 用途：开新对话时把本文件发给 AI（或让它读 `G:\project\做题\做题-vip\HANDOFF.md`），即可无缝继续。
-> 最后更新：2026-11-09（VIP 分支，基于 main `d647efe`）
+> 最后更新：2026-11-13（VIP 分支，基于 main `d647efe`）
 > **main 分支的交接说明在 `G:\project\做题\HANDOFF.md`（未入库），两份各自维护。**
+
+## 〇、2026-11-13 未提交改动（已全部改完，等用户验证/提交）
+
+- **手机端整页不可滚动的根修**（Console/三面板/AdminLayout 五文件，main 已同步同款）：
+  桌面「各栏内滚」的 `flex:1+min-height:0` 压缩链在手机文档流里把面板压到 0 高（文档高度=视口高、内容裁没）。
+  修法：≤768px 逐层解锁（容器 display:block + 面板/内滚 flex:none;height:auto;overflow:visible）。已 Playwright 390×844 实测可滚。
+  探针要点：admin 路由探针需 localStorage 塞 `token`+`ykt_role:'ADMIN'`；25173 是 vite dev（usePolling），改源码手机刷新即生效。
+- **Agent「未找到开始答题按钮」无限报错循环根修**（worker.py/ykt_driver.py，main 已同步同款）：
+  调考1/调考10 已交卷 0 分空白卷且**作答次数用完**（详情页无 开始/再次答题 入口）→ ZERO_REDO 硬闯 enter_exam 必失败 → 反复重派无限报错。
+  修法：`state=="done" && !driver.has_entry_button()` → 改走 `_collect_from_result` 只读结果页采集入库，返回 fetched/skipped 不再 FAILED；
+  另加空白卷保险：重试点击后 `checked==0`（一道都没勾上）拒绝交卷（保留作答次数；此前会照样交卷烧掉唯一次数）。
+  **调考1/调考10 的 0 分已无法挽回**（次数烧完）；修复后下轮任务会静默采集这两卷答案入库。需在启动器重启 Agent 生效。
 
 ## 一、本分支是什么
 
