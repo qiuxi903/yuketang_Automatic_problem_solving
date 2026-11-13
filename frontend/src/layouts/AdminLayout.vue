@@ -144,8 +144,15 @@ const activeName = computed(() => route.name as string)
 }
 
 @media (max-width: 768px) {
+  /* 手机端文档流：.admin 回到块级布局，内容自然撑高、body 原生滚动
+     （flex:1 + min-height:0 的 admin-body 在自动高度容器里会被压扁，内容裁没、整页滚不动） */
   .admin {
-    flex-direction: column;
+    display: block;
+  }
+  .admin-body {
+    height: auto;
+    min-height: 0;
+    overflow-y: visible;
   }
   .admin-side {
     width: 100%;

@@ -924,6 +924,20 @@ watch([() => task.value?.batch, activePaper, () => task.value?.taskId], loadShee
 }
 
 @media (max-width: 768px) {
+  /* 手机端放开高度压缩链：面板与内滚容器回到自然高度，整页文档流滚动
+     （flex:1 + min-height:0 在自动高度容器里会被压到 0 高，内容裁没、整页滚不动） */
+  .stage {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+  .stage-scroll {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow-y: visible;
+  }
   .stage-head {
     padding: 13px 14px;
     flex-wrap: wrap;

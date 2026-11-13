@@ -251,6 +251,15 @@ onMounted(async () => {
 
 /* 手机端傻瓜化：主按钮加大加满、提示更大更清楚 */
 @media (max-width: 768px) {
+  /* 底部动作条固定在 tabbar 上方：开始做题等主按钮任何时刻可见可点 */
+  .action-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom));
+    z-index: 55;
+    margin: 0;
+  }
   .ab-hint {
     font-size: 13px;
     white-space: normal;
@@ -353,13 +362,12 @@ onMounted(async () => {
     overflow: visible;
   }
   .workspace {
-    display: flex;
-    flex-direction: column;
-    grid-template-columns: 1fr;
-    grid-template-rows: none;
-    flex: none;
-    min-height: 0;
+    /* 手机端禁用 flex：面板根 flex:1/basis:0 + min-height:0 会在自动高度容器里被压到 0 高
+       （内容整个裁没、文档高度=视口高、整页滚不动）——块级布局让面板按内容自然撑高 */
+    display: block;
     overflow: visible;
+    /* 底部动作条 + tabbar 双层占位：最后一行内容不被遮挡 */
+    padding-bottom: calc(150px + env(safe-area-inset-bottom));
   }
   .is-hidden-mobile {
     display: none;
