@@ -45,6 +45,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -411,18 +412,26 @@ public class TaskService {
         // 批次已确定（用户确认或重做入口）：付费闸门在此拦截（collect 免费），未解锁批次 → 402
         String gateMode = (mode == null || mode.isBlank()) ? task.getMode() : mode;
         vipService.checkBatchAccess(userId, batch, currentUserIsAdmin(), gateMode);
-        List<String> paperNames = answerLibService.paperNames(batch);
-        if (paperNames.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批次不存在: " + batch);
+        // 批次名会用作答案库目录名：只放行日期/中文类安全字符，防路径注入
+        if (!batch.matches("[0-9A-Za-z\\-_\\u4e00-\\u9fa5（）()· ]{1,40}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批次名不合法: " + batch);
         }
-        // 总数与明细只按「批次 ∩ 账号实际作业」算：Agent 只处理账号里真实存在的卷子，
-        // 若按整批（可能 30 套）算，进度会被稀释成永远的小百分比（用户看到 0%/20% 以为卡死）
-        List<AccountPaperView> account = readPapers(task.getPapersJson());
+        List<String> paperNames = answerLibService.paperNames(batch);
         // 勾选清单优先：点了「做题/取答案」并带勾选时，任务只做勾选的卷子
         // （勾选的可能不在答案库批次里——新卷子也能做，做完采答案入库）
         List<String> redo = redoPapers == null ? List.of() : redoPapers.stream()
                 .filter(name -> name != null && !name.isBlank())
                 .toList();
+        if (paperNames.isEmpty()) {
+            // 新日期批次：答案库还没有这个日期。带勾选清单才放行（勾选的卷子做完/采集后自动入库）；
+            // 空勾选 = 没有可处理的具体卷子，照旧拒绝
+            if (redo.isEmpty()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "批次不存在: " + batch);
+            }
+        }
+        // 总数与明细只按「批次 ∩ 账号实际作业」算：Agent 只处理账号里真实存在的卷子，
+        // 若按整批（可能 30 套）算，进度会被稀释成永远的小百分比（用户看到 0%/20% 以为卡死）
+        List<AccountPaperView> account = readPapers(task.getPapersJson());
         List<String> plan;
         if (!redo.isEmpty()) {
             List<String> matched = paperNames.stream()
@@ -499,6 +508,46 @@ public class TaskService {
             int percent = total == 0 ? 0 : (int) Math.round(matched.size() * 100.0 / total);
             options.add(new BatchOptionsResponse.BatchOption(
                     batch.batch(), total, batch.questions(), matched.size(), percent, matched, missed));
+        }
+        // 新日期批次：账号作业里有、答案库还没有的日期（管理员采集/做完新卷后才会入库）。
+        // 不把它们列为候选，新日期的卷子连「确认批次」都过不去——新卷子永远进不了答案库。
+        Map<String, List<AccountPaperView>> byDate = new LinkedHashMap<>();
+        for (AccountPaperView p : papers) {
+            String d = p.date();
+            if (d == null || d.isBlank()) {
+                continue;
+            }
+            byDate.computeIfAbsent(d.trim(), k -> new ArrayList<>()).add(p);
+        }
+        List<PaperManifestResponse.BatchView> libBatches = answerLibService.getManifest().batches();
+        for (Map.Entry<String, List<AccountPaperView>> entry : byDate.entrySet()) {
+            String date = entry.getKey();
+            if (options.stream().anyMatch(o -> o.batch().equals(date))) {
+                continue; // 答案库已有该日期批次
+            }
+            List<String> matchedNames = new ArrayList<>();
+            List<String> missedNames = new ArrayList<>();
+            for (AccountPaperView p : entry.getValue()) {
+                String n = p.name() == null ? "" : p.name();
+                boolean covered = false;
+                for (PaperManifestResponse.BatchView b : libBatches) {
+                    for (PaperManifestResponse.PaperView pp : b.papers()) {
+                        String libName = pp.name();
+                        if (!n.isEmpty() && (n.contains(libName) || libName.contains(n))) {
+                            covered = true;
+                            break;
+                        }
+                    }
+                    if (covered) {
+                        break;
+                    }
+                }
+                (covered ? matchedNames : missedNames).add(n);
+            }
+            int total = entry.getValue().size();
+            int percent = total == 0 ? 0 : (int) Math.round(matchedNames.size() * 100.0 / total);
+            options.add(new BatchOptionsResponse.BatchOption(
+                    date, total, 0, matchedNames.size(), percent, matchedNames, missedNames));
         }
         options.sort(Comparator.comparingInt(BatchOptionsResponse.BatchOption::matched).reversed()
                 .thenComparing(Comparator.comparingInt(BatchOptionsResponse.BatchOption::percent).reversed()));

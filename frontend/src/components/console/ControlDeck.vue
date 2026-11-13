@@ -384,21 +384,27 @@ defineExpose({
         <div class="menu-group">
           <span class="eyebrow">选择要做的日期</span>
           <template v-if="batchCandidates.length">
-            <div
-              v-for="opt in batchCandidates"
-              :key="opt.batch"
-              class="batch-row"
-              :class="{ 'is-picked': store.selectedBatch === opt.batch }"
-              role="button"
-              @click="store.selectedBatch = opt.batch"
-            >
-              <span class="b-name">{{ opt.batch }}<span
-                v-if="unlockBadge(opt.batch)"
-                class="unlock-badge"
-                :class="{ ok: unlockBadge(opt.batch)?.ok }"
-              >{{ unlockBadge(opt.batch)?.text }}</span></span>
-              <span class="b-meta">匹配 {{ opt.percent }}%</span>
-              <span class="b-meta">{{ opt.total }} 套</span>
+            <!-- 日期多时（十几套）列表自身滚动，确认按钮始终可见 -->
+            <div class="batch-scroll">
+              <div
+                v-for="opt in batchCandidates"
+                :key="opt.batch"
+                class="batch-row"
+                :class="{ 'is-picked': store.selectedBatch === opt.batch }"
+                role="button"
+                @click="store.selectedBatch = opt.batch"
+              >
+                <span class="b-name">{{ opt.batch }}<span
+                  v-if="!opt.questions"
+                  class="unlock-badge new-batch"
+                >新</span><span
+                  v-if="unlockBadge(opt.batch)"
+                  class="unlock-badge"
+                  :class="{ ok: unlockBadge(opt.batch)?.ok }"
+                >{{ unlockBadge(opt.batch)?.text }}</span></span>
+                <span class="b-meta">匹配 {{ opt.percent }}%</span>
+                <span class="b-meta">{{ opt.total }} 套</span>
+              </div>
             </div>
             <el-button
               type="primary"
@@ -940,7 +946,8 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 240px;
+  /* 十几个日期也能放下：列表自身滚动，确认按钮始终可见 */
+  max-height: 320px;
   overflow-y: auto;
 }
 .panel-empty {
@@ -993,6 +1000,11 @@ defineExpose({
 .unlock-badge.ok {
   color: #15803d;
   background: rgba(21, 128, 61, 0.10);
+}
+/* 新日期（答案库还没有该日期，做完/采集后自动入库） */
+.unlock-badge.new-batch {
+  color: var(--amber);
+  background: var(--amber-050);
 }
 .b-name {
   font-family: var(--font-mono);
