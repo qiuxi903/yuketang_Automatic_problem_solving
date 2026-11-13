@@ -1,7 +1,18 @@
 # 交接说明（HANDOFF）· 给下一个对话/协作者
 
 > 用途：开新对话时把本文件发给 AI（或让它读 `G:\project\做题\HANDOFF.md`），即可无缝继续。
-> 最后更新：2026-11-09（HEAD `d647efe`，本地与 GitHub 已同步）
+> 最后更新：2026-11-13（本地未提交改动见下节；上次同步 HEAD `d647efe`）
+
+## 〇、2026-11-13 未提交改动（已全部改完，等用户验证/提交）
+
+- **手机端整页不可滚动的根修**（Console/AnswerStage/PaperRail/ControlDeck/AdminLayout 五文件，vip 分支已同步同款）：
+  桌面「各栏内滚」的 `flex:1+min-height:0` 压缩链在手机文档流里把面板压到 0 高（文档高度=视口高、内容裁没）。
+  修法：≤768px 逐层解锁（容器 display:block + 面板/内滚 flex:none;height:auto;overflow:visible）。已 Playwright 390×844 实测可滚。
+- **Agent「未找到开始答题按钮」无限报错循环根修**（worker.py/ykt_driver.py，vip 分支已同步同款）：
+  已交卷 0 分空白卷且作答次数用完（详情页无 开始/再次答题 入口）→ ZERO_REDO 硬闯必失败 → 反复重派无限报错。
+  修法：`state=="done" && !driver.has_entry_button()` → 改走 `_collect_from_result` 只读结果页采集入库，不再 FAILED；
+  另加空白卷保险：重试点击后一道都没勾上（checked==0）拒绝交卷，保留作答次数。需在启动器重启 Agent 生效。
+
 
 ## 一、项目是什么
 

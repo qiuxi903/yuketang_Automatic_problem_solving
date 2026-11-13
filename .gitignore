@@ -48,3 +48,6 @@ backend/config/local.yml
 start-dev.ps1
 AI协作规则.md
 docs/
+
+# vite dev 启动时生成的时间戳配置产物
+frontend/vite.config.ts.timestamp-*.mjs
