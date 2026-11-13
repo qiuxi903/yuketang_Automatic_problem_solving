@@ -85,7 +85,7 @@ impl Core {
 
 /// 为服务解析可用端口（不得在持有 Core 锁时调用——free_port 内部会加锁）。
 ///
-/// 候选顺序：基准端口永远第一（占用者一律腾位，端口永不漂移）→ 向后扫描 port_span。
+/// 候选顺序：上次解析结果（重启复用）→ 基准端口 → 向后扫描 port_span。
 /// 每个候选：有监听者 → 结束占用者（平台残留或外来程序都腾位，见 free_port）；
 /// bind 不上且无监听者 = 系统保留区间（Hyper-V 排除段，杀无可杀）→ 换下一个；
 /// 通过且未预留 → 选中。
@@ -98,6 +98,7 @@ fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
 
     // 基准端口永远第一候选：占用者一律腾位（见 free_port），端口永不漂移——
     // 内网穿透隧道/收藏夹/Agent 地址全部依赖标准端口不变；「上次换过的口优先复用」已移除。
+    // 基准口 bind 失败且无监听者（系统保留区间，杀无可杀）才向后扫描。
     let mut candidates: Vec<u16> = Vec::new();
     candidates.push(base);
     for p in base..=base.saturating_add(span) {
@@ -125,9 +126,25 @@ fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
             if !free_port(core, key, port) {
                 continue; // 占用者结束不掉（系统进程等） → 换下一个
             }
-            if try_bind(port).is_err() {
-                continue; // 清了仍绑不上
+            // 腾位后必须等端口真正释放并绑定成功才认数：旧进程树死透有延迟
+            // （npm→node、uvicorn 父子、vite 插件进程），单次 900ms 常常不够，
+            // 就会误判「不可用」而漂移。反复补杀 + 重试最多 ~10s，漂移只是万不得已。
+            let mut bound = try_bind(port);
+            let mut waits = 0u32;
+            while bound.is_err() && waits < 20 {
+                if let Some(p) = port_pid(port) {
+                    if p != std::process::id() {
+                        kill_tree(p);
+                    }
+                }
+                thread::sleep(Duration::from_millis(500));
+                waits += 1;
+                bound = try_bind(port);
             }
+            if bound.is_err() {
+                continue; // 补杀 10s 仍绑不上 → 换下一个（正常情况走不到）
+            }
+            drop(bound);
         }
         let mut c = core.lock().unwrap();
         if c.reserved.contains(&port) {
@@ -187,8 +204,17 @@ fn free_port(core: &Arc<Mutex<Core>>, key: usize, port: u16) -> bool {
         }
     }
     kill_tree(pid);
-    thread::sleep(Duration::from_millis(900));
-    if port_open(port) {
+    // 进程树死透有延迟（npm→node、uvicorn 父子结构）：轮询等 LISTEN 消失，最多 ~8s。
+    // connect 探测（port_open）对「正在死」的进程不可靠，改按 netstat LISTEN 判定。
+    let mut tries = 0u32;
+    while tries < 16 {
+        thread::sleep(Duration::from_millis(500));
+        if port_pid(port).is_none() {
+            break;
+        }
+        tries += 1;
+    }
+    if port_pid(port).is_some() {
         core.lock().unwrap().log(key, Some(Level::Danger),
             format!("端口 {port} 上的进程（PID {pid}）未能结束，换用其它端口"));
         return false;
