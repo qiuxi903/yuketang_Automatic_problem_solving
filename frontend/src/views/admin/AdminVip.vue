@@ -5,6 +5,7 @@ import { CopyDocument, Delete, Refresh } from '@element-plus/icons-vue'
 import { grantAllUsers, listUsers, listAuditLogs } from '@/api/admin'
 import type { AdminUserView } from '@/types'
 import {
+  adminDeleteOrders,
   batchVipCoupons,
   confirmVipOrder,
   deleteVipActivity,
@@ -60,6 +61,8 @@ const fen2yuan = (fen: number) => (fen / 100).toFixed(2)
 const orders = ref<VipOrder[]>([])
 const ordersLoading = ref(false)
 const orderFilter = ref<'ALL' | VipOrderStatus>('ALL')
+const orderSelected = ref<VipOrder[]>([])
+const orderTableRef = ref()
 const matchRaw = ref('')
 const matching = ref(false)
 const stats = ref<VipStats | null>(null)
@@ -193,6 +196,45 @@ async function removeNotification(row: PayNotificationView) {
   await deletePayNotification(row.id)
   ElMessage.success('已删除')
   await loadOrders()
+}
+
+/** 删除订单（单行或批量选中）。已支付订单删除不撤销已授权益——撤销请走「用户权益」页。 */
+function onOrderSelect(rows: VipOrder[]) {
+  orderSelected.value = rows
+}
+
+async function removeOrder(row: VipOrder) {
+  await removeMany([row])
+}
+
+async function removeOrdersBatch() {
+  await removeMany(orderSelected.value)
+}
+
+async function removeMany(rows: VipOrder[]) {
+  if (!rows.length) return
+  const paid = rows.filter((r) => r.status === 'PAID').length
+  const warn = paid
+    ? `其中含 ${paid} 笔已支付订单：删除订单不会撤销已授权益（需要撤销请到「用户权益」页）。`
+    : '删除后不可恢复。'
+  try {
+    await ElMessageBox.confirm(`确定删除选中的 ${rows.length} 笔订单？${warn}`, '删除订单', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    const res = await adminDeleteOrders(rows.map((r) => r.orderNo))
+    ElMessage.success(`已删除 ${res.deleted} 笔订单`)
+    orderSelected.value = []
+    orderTableRef.value?.clearSelection?.()
+    await loadOrders()
+  } catch {
+    /* 拦截器已提示 */
+  }
 }
 
 /** 粘贴收款通知文本（如「微信支付收款3.47元」）按金额快速核销。 */
@@ -742,6 +784,15 @@ onMounted(() => void loadTab(activeTab.value))
           </span>
           <div class="toolbar-actions">
             <el-button size="small" @click="onExpireStale">清理过期单</el-button>
+            <el-button
+              size="small"
+              type="danger"
+              plain
+              :disabled="!orderSelected.length"
+              @click="removeOrdersBatch"
+            >
+              删除选中{{ orderSelected.length ? `（${orderSelected.length}）` : '' }}
+            </el-button>
             <el-button size="small" @click="onExportOrders">导出订单 CSV</el-button>
             <el-button size="small" @click="onExportNotes">导出收款 CSV</el-button>
           </div>
@@ -765,7 +816,15 @@ onMounted(() => void loadTab(activeTab.value))
           <el-button type="warning" :loading="matching" @click="matchText">快速核销</el-button>
         </div>
 
-        <el-table v-if="!isMobile" :data="filteredOrders" v-loading="ordersLoading" size="large">
+        <el-table
+          v-if="!isMobile"
+          ref="orderTableRef"
+          :data="filteredOrders"
+          v-loading="ordersLoading"
+          size="large"
+          @selection-change="onOrderSelect"
+        >
+          <el-table-column type="selection" width="42" />
           <el-table-column prop="orderNo" label="订单号" min-width="130" show-overflow-tooltip />
           <el-table-column prop="username" label="用户" width="90" />
           <el-table-column label="商品" min-width="105">
@@ -795,14 +854,14 @@ onMounted(() => void loadTab(activeTab.value))
           <el-table-column label="创建时间" min-width="140">
             <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="150" fixed="right">
+          <el-table-column label="操作" width="190" fixed="right">
             <template #default="{ row }">
               <template v-if="row.status === 'CREATED'">
                 <el-button size="small" type="success" plain @click="confirm(row)">确认到账</el-button>
                 <el-button size="small" type="danger" plain @click="reject(row)">拒单</el-button>
               </template>
               <span v-else-if="row.adminRemark" class="sub-line">{{ row.adminRemark }}</span>
-              <span v-else class="muted">—</span>
+              <el-button size="small" text type="danger" @click="removeOrder(row)">删除</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -821,9 +880,12 @@ onMounted(() => void loadTab(activeTab.value))
               <span>{{ row.username }} · ¥{{ fen2yuan(row.payableFen) }}</span>
               <span>{{ formatDateTime(row.createdAt) }}</span>
             </div>
-            <div v-if="row.status === 'CREATED'" class="card-actions">
-              <el-button size="small" type="success" plain @click="confirm(row)">确认到账</el-button>
-              <el-button size="small" type="danger" plain @click="reject(row)">拒单</el-button>
+            <div class="card-actions">
+              <template v-if="row.status === 'CREATED'">
+                <el-button size="small" type="success" plain @click="confirm(row)">确认到账</el-button>
+                <el-button size="small" type="danger" plain @click="reject(row)">拒单</el-button>
+              </template>
+              <el-button size="small" type="danger" plain @click="removeOrder(row)">删除</el-button>
             </div>
           </div>
         </div>

@@ -179,6 +179,28 @@ public class VipAdminService {
         notificationRepository.deleteById(id);
     }
 
+    /** 批量删除订单（清理测试/误下记录）。已支付订单删除不影响已授权益，撤销权益请走「用户权益」页。 */
+    @Transactional
+    public int deleteOrders(List<String> orderNos, Long adminId) {
+        if (orderNos == null || orderNos.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "orderNos 不能为空");
+        }
+        List<VipOrder> found = new ArrayList<>();
+        for (String no : orderNos) {
+            orderRepository.findByOrderNo(no).ifPresent(found::add);
+        }
+        if (found.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "订单均不存在");
+        }
+        orderRepository.deleteAll(found);
+        String first = found.get(0).getOrderNo();
+        String target = found.size() == 1 ? first : first + " 等 " + found.size() + " 笔";
+        auditService.record(adminId, adminName(adminId), "DELETE_ORDERS", target,
+                "删除订单 " + found.size() + " 笔");
+        log.info("管理员 {} 删除订单 {} 笔", adminId, found.size());
+        return found.size();
+    }
+
     // ---------- 优惠码 ----------
 
     @Transactional

@@ -125,6 +125,13 @@ public class AdminVipController {
         adminService.deleteNotification(id);
     }
 
+    /** 批量删除订单（清理测试/误下记录）。已支付订单删除不影响已授权益，撤销权益请走「用户权益」页。 */
+    @PostMapping("/orders/batch-delete")
+    public Map<String, Object> deleteOrders(@RequestBody Map<String, List<String>> body) {
+        int deleted = adminService.deleteOrders(body.get("orderNos"), SecurityUtil.currentUserId());
+        return Map.of("deleted", deleted);
+    }
+
     // ---------- 优惠码 ----------
 
     @GetMapping("/coupons")

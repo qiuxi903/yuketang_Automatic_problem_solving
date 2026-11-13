@@ -257,6 +257,11 @@ export function matchPayText(raw: string) {
   return client.post<unknown, { matched: boolean }>('/admin/vip/orders/match-text', { raw })
 }
 
+/** 批量删除订单（管理员清理测试/误下记录）。 */
+export function adminDeleteOrders(orderNos: string[]) {
+  return client.post<unknown, { deleted: number }>('/admin/vip/orders/batch-delete', { orderNos })
+}
+
 export function listVipCoupons() {
   return client.get<unknown, VipCouponView[]>('/admin/vip/coupons')
 }

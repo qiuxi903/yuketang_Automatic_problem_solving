@@ -700,7 +700,10 @@ onBeforeUnmount(stopPolling)
             </em>
           </div>
 
-          <div v-if="activeOrder.payChannel === 'LISTEN' && qrImages.wechat" class="pd-qrs">
+          <div
+            v-if="(activeOrder.payChannel === 'LISTEN' || activeOrder.payChannel === 'MANUAL') && qrImages.wechat"
+            class="pd-qrs"
+          >
             <div class="pd-qr-row">
               <figure class="pd-qr">
                 <div class="pd-qr-box"><img :src="qrImages.wechat" alt="微信收款码" /></div>
@@ -711,7 +714,10 @@ onBeforeUnmount(stopPolling)
                 <figcaption>支付宝</figcaption>
               </figure>
             </div>
-            <p class="pd-qr-tip">任选一码扫码支付，金额务必按上方显示精确输入</p>
+            <p v-if="activeOrder.payChannel === 'MANUAL'" class="pd-qr-tip">
+              任选一码扫码支付，金额务必精确输入；支付完成后点「我已支付，核实到账」，管理员确认后立即开通
+            </p>
+            <p v-else class="pd-qr-tip">任选一码扫码支付，金额务必按上方显示精确输入</p>
           </div>
           <div v-else class="pd-noqr">
             <template v-if="activeOrder.payChannel === 'LISTEN'">
