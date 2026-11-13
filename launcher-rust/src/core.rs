@@ -105,25 +105,37 @@ fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
         candidates.push(p);
     }
 
-    let mut blocked = false; // 基准端口是否因系统保留/占用无法归位（用于换口提示）
+    let mut base_fail = String::new(); // 基准端口失败的具体原因（漂移日志直出，一眼定位）
     for port in candidates {
         // bind 一步分流（全部瞬时完成）：保留区间 → PermissionDenied；
         // 有监听者 → AddrInUse（走杀进程腾位）；空闲 → Ok
         let probe = try_bind(port);
         let occupied = matches!(&probe, Err(e) if e.kind() == std::io::ErrorKind::AddrInUse);
         if matches!(&probe, Err(_)) && !occupied {
-            blocked = true;
+            if port == base {
+                base_fail = match &probe {
+                    Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+                        "被系统保留区间吞掉（Hyper-V/WinNAT 排除段）——运行「保留平台端口.bat」可永久免疫".into()
+                    }
+                    Err(e) => format!("bind 失败：{e}"),
+                    _ => "bind 失败".into(),
+                };
+            }
             continue; // 系统保留区间等，杀无可杀 → 换下一个
         }
         drop(probe);
         if occupied {
             // 本会话其它服务已预留的端口绝不互杀，直接换下一个
             if core.lock().unwrap().reserved.contains(&port) {
-                blocked = true;
+                if port == base {
+                    base_fail = "被本会话其它服务预留".into();
+                }
                 continue;
             }
-            blocked = true;
             if !free_port(core, key, port) {
+                if port == base {
+                    base_fail = format!("占用者无法结束（PID {}）", port_pid(port).map(|p| p.to_string()).unwrap_or("?".into()));
+                }
                 continue; // 占用者结束不掉（系统进程等） → 换下一个
             }
             // 腾位后必须等端口真正释放并绑定成功才认数：旧进程树死透有延迟
@@ -142,6 +154,9 @@ fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
                 bound = try_bind(port);
             }
             if bound.is_err() {
+                if port == base {
+                    base_fail = "腾位后反复补杀仍 bind 失败（进程树反复残留）".into();
+                }
                 continue; // 补杀 10s 仍绑不上 → 换下一个（正常情况走不到）
             }
             drop(bound);
@@ -151,9 +166,13 @@ fn resolve_service_port(core: &Arc<Mutex<Core>>, key: usize) -> Option<u16> {
             continue; // 本会话其它服务刚预留
         }
         if port != SERVICES[key].base_port.unwrap_or(port) {
-            let reason = if blocked { "被系统保留区间吞掉或占用者无法结束" } else { "不可用" };
+            let reason = if base_fail.is_empty() {
+                "不可用".to_string()
+            } else {
+                base_fail.clone()
+            };
             c.log(key, Some(Level::Warn),
-                format!("端口 {} {}，{} 改用 {}（保留区间随重启漂移，届时会自动回到标准端口）",
+                format!("端口 {} {}，{} 改用 {}（下次重启自动回到标准端口；保留段问题跑一次「保留平台端口.bat」永久解决）",
                         SERVICES[key].base_port.unwrap_or(port), reason, SERVICES[key].short, port));
         }
         c.reserved.insert(port);
