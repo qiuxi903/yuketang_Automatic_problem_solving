@@ -517,7 +517,13 @@ public class TaskService {
             if (d == null || d.isBlank()) {
                 continue;
             }
-            byDate.computeIfAbsent(d.trim(), k -> new ArrayList<>()).add(p);
+            // 学习日志的日期带星期（如「10-30 周五」）：只取 MM-DD 与答案库批次名对齐，
+            // 否则同一日期会出现「10-30」+「10-30 周五」两条重复候选
+            java.util.regex.Matcher mm = java.util.regex.Pattern.compile("(\\d{1,2}-\\d{1,2})").matcher(d);
+            if (!mm.find()) {
+                continue;
+            }
+            byDate.computeIfAbsent(mm.group(1), k -> new ArrayList<>()).add(p);
         }
         List<PaperManifestResponse.BatchView> libBatches = answerLibService.getManifest().batches();
         for (Map.Entry<String, List<AccountPaperView>> entry : byDate.entrySet()) {
