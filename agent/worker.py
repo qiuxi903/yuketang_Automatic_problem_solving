@@ -6,6 +6,7 @@ P0 单账号串行；多实例并发由 WORKER_COUNT 与 backend 的任务领取
 
 import logging
 import queue
+import random
 import threading
 import time
 
@@ -27,6 +28,34 @@ _ACCOUNT_LOCK = threading.Lock()
 
 # 多选答案在答案库/校验里用「；」连接多个选项（与 ykt_driver.ANSWER_SEP 一致）
 _ANSWER_SEP = "；"
+
+
+def degrade_for_rhythm(questions, idx, attempt, perfect):
+    """满分节奏降级：把部分「已匹配到答案的单选题」改成错误选项。
+
+    进步曲线：越接近目标遍数留错越少（2 遍目标第 1 遍约留错 11%；
+    5 遍目标从第 1 遍 ~17.6% 递减到第 4 遍 ~4.4%），成绩逐步爬升更像真人刷分。
+    只动「int 下标命中且选项数>=2」的单选题；多选与未匹配题保持原样。
+    返回 (new_idx, 留错题数)。
+    """
+    candidates = []
+    for i in range(min(len(questions), len(idx))):
+        ix = idx[i]
+        if not isinstance(ix, int) or ix < 0:
+            continue
+        opts = questions[i].get("options") or []
+        if len(opts) >= 2 and ix < len(opts):
+            candidates.append(i)
+    if not candidates or perfect <= 1 or attempt >= perfect:
+        return idx, 0
+    ratio = 0.22 * (perfect - attempt) / max(1, perfect)
+    n_wrong = min(len(candidates), max(1, round(len(candidates) * ratio)))
+    wrong = set(random.sample(candidates, n_wrong))
+    new_idx = list(idx)
+    for i in wrong:
+        opts_n = len(questions[i].get("options") or [])
+        new_idx[i] = (idx[i] + 1) % opts_n
+    return new_idx, n_wrong
 
 
 def _picked_texts(options, pick):
@@ -892,6 +921,26 @@ class Worker:
 
             self._stage(task_id, f"{name}：兜底补答")
             self._fill_by_fallback(batch, name, questions, idx)
+
+            # 满分节奏：第 N 次作答才全对——前面的遍数按进步曲线故意留错（更像真人刷分）。
+            # 第几遍 = 该卷名在平台上的历史已交卷次数 + 1（跨任务统计，重做一遍即第 2 遍）。
+            _perfect = task.get("perfectPass") or 1
+            try:
+                _perfect = max(1, min(5, int(_perfect)))
+            except (TypeError, ValueError):
+                _perfect = 1
+            if _perfect > 1:
+                try:
+                    _counts = self.backend.get_pass_counts(task_id) or {}
+                except Exception:
+                    _counts = {}
+                _attempt = int(_counts.get(name, 0)) + 1
+                if _attempt < _perfect:
+                    idx, _wrong = degrade_for_rhythm(questions, idx, _attempt, _perfect)
+                    _msg = (f"满分节奏：本次是第 {_attempt} 遍（目标第 {_perfect} 遍全对），"
+                            f"按进步曲线故意留错 {_wrong} 题，下次作答才满分")
+                    log.info("[%s] %s %s", self.name, name, _msg)
+                    self.backend.post_progress(task_id, name, exam_id, message=_msg)
 
             # 逐题回报：前端「题号进度」实时跟进，不再一卷结束才跳一格
             self._stage(task_id, f"{name}：逐题作答", announce=False)

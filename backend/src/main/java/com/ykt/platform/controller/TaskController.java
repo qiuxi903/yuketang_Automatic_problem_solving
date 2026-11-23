@@ -57,7 +57,7 @@ public class TaskController {
     /** 确认批次与作答模式，任务交回 Agent 继续作答。 */
     @PostMapping("/{id}/batch")
     public OkResponse setBatch(@PathVariable Long id, @RequestBody SetBatchRequest request) {
-        return taskService.setBatch(SecurityUtil.currentUserId(), id, request.batch(), request.mode(), request.redoPapers());
+        return taskService.setBatch(SecurityUtil.currentUserId(), id, request.batch(), request.mode(), request.redoPapers(), request.perfectPass());
     }
 
     @PostMapping("/{id}/pause")

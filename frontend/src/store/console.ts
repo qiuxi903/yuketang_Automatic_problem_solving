@@ -66,6 +66,8 @@ export const useConsoleStore = defineStore('console', () => {
   const starting = ref(false)
   const busy = ref(false)
   const batchOptions = ref<BatchOptions | null>(null)
+  /** 满分节奏：第几次作答才全对（默认 2：先低分再满分，更像真人刷分）。 */
+  const perfectPass = ref(2)
   const selectedBatch = ref('')
   const batchLoading = ref(false)
   // 浏览器模式：Agent 回传的最近一帧雨课堂实时页面
@@ -373,7 +375,7 @@ export const useConsoleStore = defineStore('console', () => {
     }
     busy.value = true
     try {
-      await setTaskBatch(current.taskId, { batch, mode })
+      await setTaskBatch(current.taskId, { batch, mode, perfectPass: perfectPass.value })
       log('ok', '批次与模式已确认', `${batch} · ${MODE_LABEL[mode]}，Agent 继续作答`)
       await loadTask(current.taskId)
       await loadSession()
@@ -607,7 +609,8 @@ export const useConsoleStore = defineStore('console', () => {
       log('info', '发起做题任务', '扫码登录后选择批次与作答模式')
       const createdSession = await createSession()
       log('info', '会话已创建', `#${createdSession.sessionId}，等待 Agent 回传二维码`)
-      const createdTask = await createTask({ sessionId: createdSession.sessionId })
+      const createdTask = await createTask(
+        { sessionId: createdSession.sessionId, perfectPass: perfectPass.value })
       log('ok', `任务 #${createdTask.taskId} 已排队`, '扫码登录后按账号实际作业选择批次与作答模式')
       await attachTask(createdTask.taskId)
       return createdTask.taskId
@@ -637,6 +640,7 @@ export const useConsoleStore = defineStore('console', () => {
         mode: 'answer',
         redoPapers: papers,
         reuseYkt,
+        perfectPass: perfectPass.value,
       })
       log('ok', `重做任务 #${createdTask.taskId} 已创建`, '请扫码登录雨课堂，Agent 将直接开始重做')
       await attachTask(createdTask.taskId)
@@ -726,7 +730,8 @@ export const useConsoleStore = defineStore('console', () => {
         }
         const tid = t?.taskId ?? activeTaskId.value
         if (!tid) return null
-        await setTaskBatch(tid, { batch: best, mode, redoPapers: targets })
+        await setTaskBatch(tid, { batch: best, mode, redoPapers: targets,
+          perfectPass: perfectPass.value })
         log('ok', `任务 #${tid} 已开始（${verb}）`,
           `自动匹配答案库批次 ${best}；处理 ${targets.length} 套`)
         await loadTask(tid)
@@ -742,6 +747,7 @@ export const useConsoleStore = defineStore('console', () => {
         mode,
         redoPapers: targets.length ? targets : undefined,
         reuseYkt,
+        perfectPass: perfectPass.value,
       })
       log('ok', `任务 #${createdTask.taskId} 已创建`, `处理 ${targets.length} 套 · ${verb}；沿用当前登录直接开做`)
       await attachTask(createdTask.taskId)
@@ -985,6 +991,7 @@ export const useConsoleStore = defineStore('console', () => {
     busy,
     batchOptions,
     selectedBatch,
+    perfectPass,
     endTaskGoHome,
     interruptTaskNow,
     batchLoading,

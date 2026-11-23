@@ -153,6 +153,7 @@ public class TaskService {
         // VIP 绑定校验：免扫码续做必须用自己绑定的雨课堂账号
         vipService.checkReuseAllowed(userId, task.getReuseYkt());
         task.setMode(request.mode() == null || request.mode().isBlank() ? "answer" : request.mode());
+        task.setPerfectPass(clampPerfect(request.perfectPass()));
         task.setStatus(TaskStatus.PENDING);
         try {
             task.setRedoJson(redo.isEmpty() ? null : objectMapper.writeValueAsString(redo));
@@ -401,7 +402,8 @@ public class TaskService {
 
     /** 用户确认批次与作答模式：补齐任务明细并把任务交回 Agent 继续作答。 */
     @Transactional
-    public OkResponse setBatch(Long userId, Long taskId, String batch, String mode, List<String> redoPapers) {
+    public OkResponse setBatch(Long userId, Long taskId, String batch, String mode, List<String> redoPapers,
+                               Integer perfectPass) {
         if (batch == null || batch.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "batch 不能为空");
         }
@@ -454,6 +456,7 @@ public class TaskService {
         // 模式后置：登录后确认，缺省沿用任务创建时的模式
         String resolvedMode = (mode == null || mode.isBlank()) ? task.getMode() : mode;
         task.setMode(resolvedMode);
+        task.setPerfectPass(clampPerfect(perfectPass));
         task.setBatch(batch);
         try {
             task.setRedoJson(redoPapers == null || redoPapers.isEmpty()
@@ -838,6 +841,28 @@ public class TaskService {
                 .count();
     }
 
+    /** 满分节奏取值收敛：1-5，越界/空值回落 1（= 一次全对，兼容旧请求）。 */
+    private static int clampPerfect(Integer v) {
+        if (v == null) {
+            return 1;
+        }
+        return Math.max(1, Math.min(5, v));
+    }
+
+    /** 满分节奏：该账号历史已交卷（SUBMITTED）的卷名→次数，Agent 据此判断本次是第几遍作答。 */
+    public Map<String, Long> passCounts(Long taskId) {
+        Task task = require(taskId);
+        Map<String, Long> out = new LinkedHashMap<>();
+        for (Object[] row : taskItemRepository.countSubmittedGroupedByUser(
+                task.getUserId(), TaskItemStatus.SUBMITTED)) {
+            String name = (String) row[0];
+            if (name != null && !name.isBlank()) {
+                out.put(name, (Long) row[1]);
+            }
+        }
+        return out;
+    }
+
     private TaskSnapshot toSnapshot(Task task) {
         List<TaskItemSnapshot> items = taskItemRepository.findByTaskIdOrderByIdAsc(task.getId()).stream()
                 .map(item -> new TaskItemSnapshot(item.getPaperName(), item.getExamId(),
@@ -862,6 +887,7 @@ public class TaskService {
                 readPapers(task.getPapersJson()),
                 readRedo(task.getRedoJson()),
                 task.getReuseYkt(),
+                task.getPerfectPass() == null ? 1 : task.getPerfectPass(),
                 task.getCreatedAt());
     }
 

@@ -37,6 +37,9 @@ public class Task {
     @Lob
     private String redoJson;
 
+    /** 满分节奏：第几次作答才全对（1-5；null 视为 1 = 一次全对）。 */
+    private Integer perfectPass;
+
     /** 同账号续做提示：Agent 优先派给已登录该雨课堂账号的工人（免扫码）。 */
     @Column(length = 64)
     private String reuseYkt;
@@ -146,6 +149,14 @@ public class Task {
 
     public void setMode(String mode) {
         this.mode = mode;
+    }
+
+    public Integer getPerfectPass() {
+        return perfectPass;
+    }
+
+    public void setPerfectPass(Integer perfectPass) {
+        this.perfectPass = perfectPass;
     }
 
     public TaskStatus getStatus() {
