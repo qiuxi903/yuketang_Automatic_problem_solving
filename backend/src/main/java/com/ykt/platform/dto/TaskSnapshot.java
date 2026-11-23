@@ -24,6 +24,8 @@ public record TaskSnapshot(
         List<String> redoPapers,
         /** 同账号续做提示：优先派给已登录该雨课堂账号的执行工人。 */
         String reuseYkt,
+        /** 满分节奏：第几次作答才全对（1-5；缺省 1 = 一次全对）。 */
+        int perfectPass,
         /** 任务创建时间；「我的任务」列表按此展示，刷新后据此恢复最近一次任务。 */
         Instant createdAt) {
 }

@@ -46,6 +46,12 @@ public class AgentController {
         return snapshot == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(snapshot);
     }
 
+    /** 满分节奏：该账号历史已交卷的卷名→次数（Agent 判断本次是第几遍作答）。 */
+    @GetMapping("/{id}/pass-counts")
+    public java.util.Map<String, Long> passCounts(@PathVariable Long id) {
+        return taskService.passCounts(id);
+    }
+
     @PostMapping("/{id}/qrcode")
     public OkResponse qrcode(@PathVariable Long id, @RequestBody AgentQrcodeRequest request) {
         return taskService.updateQrcode(id, request.qrcode());

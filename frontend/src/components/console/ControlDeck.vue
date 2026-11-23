@@ -401,6 +401,19 @@ defineExpose({
           </p>
         </div>
 
+        <!-- 满分节奏：第几次作答才全对；前面的遍数按进步曲线故意留错（只对做题生效） -->
+        <div class="menu-group">
+          <span class="eyebrow">满分节奏</span>
+          <el-select v-model="store.perfectPass" class="full" size="small">
+            <el-option :value="1" label="第 1 次就全对（一次性满分）" />
+            <el-option :value="2" label="第 2 次全对（默认·先低分再满分）" />
+            <el-option :value="3" label="第 3 次全对（逐步逼近满分）" />
+            <el-option :value="4" label="第 4 次全对" />
+            <el-option :value="5" label="第 5 次全对" />
+          </el-select>
+          <p class="hint">没到目标次数的作答会按进步曲线故意留错，成绩逐步爬升更像真人。每次作答都消耗雨课堂的作答次数；只允许作答一次的卷子，第一次的成绩会保留。</p>
+        </div>
+
         <!-- 手机端开始按钮统一在底部动作条，这里隐藏避免重复 -->
         <div class="menu-group mobile-hide">
           <span class="eyebrow">开始方式（二选一）</span>

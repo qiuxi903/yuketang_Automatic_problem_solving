@@ -2,5 +2,5 @@ package com.ykt.platform.dto;
 
 import java.util.List;
 
-public record SetBatchRequest(String batch, String mode, List<String> redoPapers) {
+public record SetBatchRequest(String batch, String mode, List<String> redoPapers, Integer perfectPass) {
 }

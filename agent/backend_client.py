@@ -29,6 +29,12 @@ class BackendClient:
         r.raise_for_status()
         return r.json()
 
+    def get_pass_counts(self, task_id):
+        """满分节奏：该账号历史已交卷的卷名→次数（Agent 判断本次是第几遍作答）。"""
+        r = _session.get(self.base + "/api/agent/tasks/{}/pass-counts".format(task_id), timeout=10)
+        r.raise_for_status()
+        return r.json()
+
     def next_task(self):
         r = _session.get(self.base + "/api/agent/tasks/next", timeout=10)
         if r.status_code == 204:

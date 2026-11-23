@@ -147,6 +147,8 @@ export interface TaskSnapshot {
   papers: AccountPaper[]
   /** 重做任务只处理这些卷子（普通任务为空数组）。 */
   redoPapers?: string[]
+  /** 满分节奏：第几次作答才全对（1-5）。 */
+  perfectPass: number
   /** 任务创建时间，任务跟着账号走，「我的任务」列表与刷新后恢复都以此为准 */
   createdAt: string
 }
@@ -167,6 +169,8 @@ export interface TaskCreatePayload {
   redoPapers?: string[]
   /** 同账号续做提示：Agent 优先派给已登录该雨课堂账号的执行工人（免扫码）。 */
   reuseYkt?: string | null
+  /** 满分节奏：第几次作答才全对（1-5）。 */
+  perfectPass?: number
 }
 
 /* —— 批次后置 + 模式后置：登录后按账号作业确认批次与作答模式 —— */
@@ -176,6 +180,8 @@ export interface SetBatchPayload {
   mode?: TaskMode
   /** 勾选的卷子清单：只做/只取这些卷子（自动匹配推荐批次）。 */
   redoPapers?: string[]
+  /** 满分节奏：第几次作答才全对（1-5）。 */
+  perfectPass?: number
 }
 
 export interface AccountPaper {
