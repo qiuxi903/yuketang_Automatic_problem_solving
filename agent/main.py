@@ -43,7 +43,7 @@ def main():
         workers.append(w)
         time.sleep(3)  # 错峰启动：多个 Chrome 同时冷启动会相互干扰导致启动失败
     # 调度器在主线程：唯一领任务入口，把任务派给各工人（多账号并行的核心）
-    Dispatcher(workers).run_forever()
+    Dispatcher(workers, max_workers=config.MAX_WORKER_COUNT).run_forever()
 
 
 if __name__ == "__main__":
