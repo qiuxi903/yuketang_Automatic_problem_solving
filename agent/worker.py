@@ -361,7 +361,9 @@ class Worker:
         self.queue.put(task)
 
     def idle(self):
-        return not self.busy
+        # 队列里还有排队的任务也算「不空闲」：否则 busy 要等工人取队列才置位，
+        # 派发器在窗口期会继续把新任务塞给同一个工人（其它工人摸鱼、后面的账号干等）
+        return not self.busy and self.queue.empty()
 
     def _prewarm(self):
         """预热浏览器：失败自动重试一次（Chrome 冷启动偶发竞态）。
@@ -1371,9 +1373,11 @@ class Dispatcher:
                 log.info("调度器领到任务 #%s reuseYkt=%s", tid, task.get("reuseYkt"))
                 with self._lock:
                     # 领取即登记去重：周期补收养看到同一任务 RUNNING 时不再二次派发
-                    # （曾因漏登记导致同一任务被两个工人同时执行，互相踩状态直至任务失败）
+                    # （曾因漏登记导致同一任务被两个工人同时执行，互相踩状态直至任务失败）；
+                    # 暂停后「继续」会让同一任务重新回流，这里替换旧快照、绝不重复入队
                     if tid is not None:
                         self._adopted_ids.add(tid)
+                        self.parked = [t for t in self.parked if t.get("taskId") != tid]
                     self.parked.append(task)
             self._dispatch()
             time.sleep(config.POLL_INTERVAL)
@@ -1382,12 +1386,16 @@ class Dispatcher:
         feeds = []
         with self._lock:
             remaining = []
+            taken = set()  # 本次扫荡已派出的工人：一轮里每人最多接一个任务，
+                           # 否则 w.busy 要等工人取队列才置位，5 个任务会全塞给同一个空闲工人，
+                           # 其它工人干瞪眼、后面的账号永远排队
             for task in self.parked:
-                worker = self._pick(task)
+                worker = self._pick(task, exclude=taken)
                 if worker is None:
                     remaining.append(task)
                 else:
                     feeds.append((task, worker))
+                    taken.add(id(worker))
                     log.info("任务 #%s → 工人 %s", task.get("taskId"), worker.name)
             self.parked = remaining
             parked_ids = [t.get("taskId") for t in self.parked]
@@ -1400,8 +1408,10 @@ class Dispatcher:
             except Exception:
                 pass
 
-    def _pick(self, task):
-        """挑执行工人。多账号铁律：同一雨课堂账号同时只允许一个任务。
+    def _pick(self, task, exclude=None):
+        """挑执行工人（exclude=本次扫荡已派活的工人 id 集合，一轮内不再重复派）。
+
+        多账号铁律：同一雨课堂账号同时只允许一个任务。
 
         - 任务声明了 reuseYkt（续做）：优先派给已登录该账号的空闲工人；
           若该账号正被其它任务占用 → 返回 None（任务排队等待）。
@@ -1420,11 +1430,12 @@ class Dispatcher:
             log.info("账号 %s 正被其它任务占用，任务 #%s 排队等待",
                      want, task.get("taskId"))
             return None
+        skip = exclude or set()
         if want:
             for w in self.workers:
-                if w.idle() and w.ykt_name == want:
+                if id(w) not in skip and w.idle() and w.ykt_name == want:
                     return w
         for w in self.workers:
-            if w.idle():
+            if id(w) not in skip and w.idle():
                 return w
         return None
