@@ -5,6 +5,7 @@ P0 单账号串行；多实例并发由 WORKER_COUNT 与 backend 的任务领取
 """
 
 import logging
+import os
 import queue
 import random
 import threading
@@ -1069,7 +1070,20 @@ class Worker:
                 driver.open_exam(course_id, exam_id, on_tick=tick)           # 兜底：详情页点「查看试卷」
                 ok = driver.open_result_from_detail(on_tick=tick)
             if not ok:
-                raise RuntimeError("结果页未就绪：%s" % name)
+                # 失败留证：截屏 + 记录实际 URL——「结果页打不开」最常见原因是老师未开放查看试卷
+                #（考试未结束/成绩未公布），页面进不去；留证后能一眼确认是未开放还是页面改版
+                try:
+                    shot_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                            "runtime", "screenshots")
+                    os.makedirs(shot_dir, exist_ok=True)
+                    shot = os.path.join(shot_dir, "result_fail_%s.png" % name)
+                    driver.page.screenshot(path=shot)
+                    log.warning("[%s] %s 结果页打不开（URL: %s），已截屏 %s",
+                                self.name, name, (driver.page.url or "")[:120], shot)
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    "结果页未就绪：%s（常见原因：老师未开放查看试卷/成绩未公布，稍后可重新取答案）" % name)
             self._push_frame(driver, task_id, force=True)
 
             self._stage(task_id, f"{name}：读取正确答案")
