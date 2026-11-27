@@ -566,7 +566,10 @@ defineExpose({
           <div v-else-if="qrWaitSec !== null && qrWaitSec >= 30" class="qr-error">
             <el-icon class="qr-error-icon"><WarningFilled /></el-icon>
             <span>二维码长时间未生成（已等待 {{ qrWaitSec }} 秒）</span>
-            <span class="qr-error-sub">可能原因：Agent 未启动、任务被限流拦截或排队过久。请点「重新获取二维码」重试，或联系管理员确认 Agent 正在运行。</span>
+            <span v-if="store.task?.message?.includes('排队')" class="qr-error-sub">
+              当前任务在排队等待执行工位（每个账号一个独立浏览器，任务多时会自动扩容新工位），二维码出现前请稍候，无需重复点「重新获取」。
+            </span>
+            <span v-else class="qr-error-sub">可能原因：Agent 未启动、任务被限流拦截或排队过久。请点「重新获取二维码」重试，或联系管理员确认 Agent 正在运行。</span>
           </div>
           <div v-else class="qr-pending">
             <el-icon class="spin"><Refresh /></el-icon>

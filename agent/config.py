@@ -30,6 +30,8 @@ POLL_INTERVAL = float(os.environ.get("AGENT_POLL_INTERVAL", "1"))
 ZERO_REDO = os.environ.get("AGENT_ZERO_REDO", "1") not in ("0", "false", "False")
 # 执行工人数 = 可并行的雨课堂账号数（每个工人独占一个浏览器）
 WORKER_COUNT = int(os.environ.get("AGENT_WORKER_COUNT", "3"))
+# 动态扩容上限：排队任务多时自动加浏览器工位（每个人立即拿到自己的二维码，不排队）
+MAX_WORKER_COUNT = int(os.environ.get("AGENT_MAX_WORKERS", "8"))
 
 PAPER_GAP = float(os.environ.get("AGENT_PAPER_GAP", "0.8"))
 LOGIN_TIMEOUT = int(os.environ.get("AGENT_LOGIN_TIMEOUT", "180"))

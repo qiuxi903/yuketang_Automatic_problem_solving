@@ -680,7 +680,10 @@ class Worker:
         except LoginRequired as exc:
             self._stage_text = ""
             self.backend.post_session_status(task_id, "EXPIRED")
-            self._safe_finish(task, "FAILED", summary="登录超时：%s" % exc)
+            # 扫码超时不判「失败」：改为暂停并释放工位，用户点「继续做题」可重新出码，
+            # 避免界面上直接出现刺眼的「失败」（任务本身没有出错，只是没人扫码）
+            self._safe_finish(task, "PAUSED",
+                              summary="扫码超时，任务已暂停（工位已释放）；点「继续做题」重新获取二维码")
         finally:
             stop_hb.set()
             if ykt_name:
@@ -1323,8 +1326,11 @@ class Dispatcher:
     3) 无空闲工人 → 任务停放，工人空闲后立即派发（排队）。
     """
 
-    def __init__(self, workers):
+    def __init__(self, workers, max_workers=None):
         self.workers = workers
+        # 工位上限：排队任务多于空闲工位时动态加浏览器（每个都独立扫码），
+        # 不再让用户干等别人扫完/超时；上限防无节制开 Chrome 吃内存。
+        self.max_workers = max_workers or len(workers)
         self.backend = BackendClient()
         self.base = config.BACKEND_BASE
         self.parked = []
@@ -1399,6 +1405,13 @@ class Dispatcher:
                            # 其它工人干瞪眼、后面的账号永远排队
             for task in self.parked:
                 worker = self._pick(task, exclude=taken)
+                if worker is None and len(self.workers) < self.max_workers:
+                    # 排队压力 → 动态加工位，让每个人立刻拿到自己的二维码（不排队）
+                    worker = self._grow_worker()
+                    if worker is not None:
+                        taken.add(id(worker))
+                        log.info("动态扩容执行工人 %s（%d/%d）：排队任务自动加浏览器，出码不排队",
+                                 worker.name, len(self.workers), self.max_workers)
                 if worker is None:
                     remaining.append(task)
                 else:
@@ -1415,6 +1428,22 @@ class Dispatcher:
                 self.backend.post_progress(tid, message="已排队，等待空闲执行位（多账号并行中）")
             except Exception:
                 pass
+
+    def _grow_worker(self):
+        """加一个执行工人（独立浏览器工位）。调用方需持有 self._lock。
+
+        不加 3 秒错峰：排队时用户正等二维码，先起线程；Chrome 冷启动失败由 _prewarm 内置重试兜底。
+        """
+        name = "w%d" % len(self.workers)
+        try:
+            w = Worker(name=name)
+        except Exception as exc:
+            log.warning("动态扩容工位失败：%s", exc)
+            return None
+        t = threading.Thread(target=w.run_forever, name=w.name, daemon=True)
+        t.start()
+        self.workers.append(w)
+        return w
 
     def _pick(self, task, exclude=None):
         """挑执行工人（exclude=本次扫荡已派活的工人 id 集合，一轮内不再重复派）。
