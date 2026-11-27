@@ -1333,6 +1333,12 @@ class Dispatcher:
             tid = task.get("taskId")
             if tid is None or tid in self._adopted_ids:
                 continue
+            # 双重防护：已在排队 / 正在被其它工人执行的，绝不重复派发
+            # （同一任务双跑会互相踩状态：抢卷子、烧作答次数、把任务弄成失败）
+            if any(t.get("taskId") == tid for t in self.parked):
+                continue
+            if any(w.current_task and w.current_task.get("taskId") == tid for w in self.workers):
+                continue
             self._adopted_ids.add(tid)
             log.info("收养孤儿任务 #%s（上次进程遗留 / 批次确认晚于 Agent 启动）", tid)
             self.parked.append(task)
@@ -1364,6 +1370,10 @@ class Dispatcher:
                 tid = task.get("taskId")
                 log.info("调度器领到任务 #%s reuseYkt=%s", tid, task.get("reuseYkt"))
                 with self._lock:
+                    # 领取即登记去重：周期补收养看到同一任务 RUNNING 时不再二次派发
+                    # （曾因漏登记导致同一任务被两个工人同时执行，互相踩状态直至任务失败）
+                    if tid is not None:
+                        self._adopted_ids.add(tid)
                     self.parked.append(task)
             self._dispatch()
             time.sleep(config.POLL_INTERVAL)
