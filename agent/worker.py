@@ -49,7 +49,9 @@ def degrade_for_rhythm(questions, idx, attempt, perfect):
     if not candidates or perfect <= 1 or attempt >= perfect:
         return idx, 0
     ratio = 0.22 * (perfect - attempt) / max(1, perfect)
-    n_wrong = min(len(candidates), max(1, round(len(candidates) * ratio)))
+    # 留错数量同样随机（0.5~1.5 倍抖动）：每张卷分数不同，避免恒等分暴露机器痕迹
+    jitter = random.uniform(0.5, 1.5)
+    n_wrong = min(len(candidates), max(1, round(len(candidates) * ratio * jitter)))
     wrong = set(random.sample(candidates, n_wrong))
     new_idx = list(idx)
     for i in wrong:
