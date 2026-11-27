@@ -870,130 +870,157 @@ class Worker:
                 ok = self._collect_from_result(driver, task, batch, paper)
                 return "fetched" if ok else "skipped"
 
-            if self._abort.is_set():
-                raise AbortTask()  # 用户已暂停/中断：不再进入答题页
-            self._stage(task_id, f"{name}：进入答题页")
-            if not driver.enter_exam(on_tick=tick):
-                raise RuntimeError("未找到开始答题按钮")
-            if not driver.wait_exam_ready(on_tick=tick):
-                raise RuntimeError("答题页未就绪")
-            self._push_frame(driver, task_id, force=True)
-
-            self._stage(task_id, f"{name}：抓取题目")
-            questions = driver.scrape_questions()
-            self._push_questions(task_id, name, exam_id, questions)
-            self._stage(task_id, f"{name}：匹配答案库")
-            built = self.matcher.build_idx(batch, name, questions)
-            idx = built.get("idx", [])
-            cross = built.get("crossMatched") or []
-            if cross:
-                log.info("[%s] %s 跨卷同题命中 %d/%d 题（借用库内其它试卷的同题答案）",
-                         self.name, name, len(cross), len(questions))
-            if not idx and questions:
-                # 兜底：matcher 返回异常（无 idx 字段）时，按「全部未匹配」处理，
-                # 让兜底补答与交卷后采集照常进行
-                idx = [-1] * len(questions)
-            if not built.get("paperInLib", True) and questions:
-                # 新卷子（答案库没有该卷）：先跨卷同题匹配，剩余的交卷后采集入库
-                if cross:
-                    msg = (f"新卷子：答案库其它试卷命中 {len(cross)}/{len(questions)} 题（同类题目复用），"
-                           "其余题将尝试兜底作答")
-                else:
-                    msg = (f"新卷子：答案库暂无该卷，{len(questions)} 题将尝试兜底 API 作答"
-                           "（未配置兜底时无法保证正确率）")
-                self.backend.post_progress(task_id, name, exam_id, message=msg)
-            if built.get("lowConfidence"):
-                log.warning("[%s] %s 低置信题 %d 道", self.name, name, len(built["lowConfidence"]))
-            # 新题型（填空/简答等无选项题）：如实告知用户，自动跳过不点选
-            noopts = built.get("noOptions") or []
-            if noopts:
-                qs = "、".join(str(x.get("q")) for x in noopts[:12])
-                more = " 等" if len(noopts) > 12 else ""
-                self.backend.post_progress(
-                    task_id, name, exam_id,
-                    message=f"第 {qs}{more} 题没有选项（填空/主观题等新题型），本平台暂不支持自动作答，已跳过")
-
-            self._stage(task_id, f"{name}：兜底补答")
-            self._fill_by_fallback(batch, name, questions, idx)
-
             # 满分节奏：第 N 次作答才全对——前面的遍数按进步曲线故意留错（更像真人刷分）。
             # 第几遍 = 该卷名在平台上的历史已交卷次数 + 1（跨任务统计，重做一遍即第 2 遍）。
+            # 关键：逐卷闭环——一套卷第一次留错后「立即重做本卷」到满分，再进下一套，
+            # 不再全部做完再统一重做（避免与「重做刷满分」弹窗割裂、分数长时间挂低）。
             _perfect = task.get("perfectPass") or 1
             try:
                 _perfect = max(1, min(5, int(_perfect)))
             except (TypeError, ValueError):
                 _perfect = 1
+            _attempt = 1
             if _perfect > 1:
                 try:
                     _counts = self.backend.get_pass_counts(task_id) or {}
                 except Exception:
                     _counts = {}
                 _attempt = int(_counts.get(name, 0)) + 1
-                if _attempt < _perfect:
+
+            while True:
+                if self._abort.is_set():
+                    raise AbortTask()  # 用户已暂停/中断：不再进入答题页
+                self._stage(task_id, f"{name}：进入答题页")
+                if not driver.enter_exam(on_tick=tick):
+                    raise RuntimeError("未找到开始答题按钮")
+                if not driver.wait_exam_ready(on_tick=tick):
+                    raise RuntimeError("答题页未就绪")
+                self._push_frame(driver, task_id, force=True)
+
+                self._stage(task_id, f"{name}：抓取题目")
+                questions = driver.scrape_questions()
+                self._push_questions(task_id, name, exam_id, questions)
+                self._stage(task_id, f"{name}：匹配答案库")
+                built = self.matcher.build_idx(batch, name, questions)
+                idx = built.get("idx", [])
+                cross = built.get("crossMatched") or []
+                if cross:
+                    log.info("[%s] %s 跨卷同题命中 %d/%d 题（借用库内其它试卷的同题答案）",
+                             self.name, name, len(cross), len(questions))
+                if not idx and questions:
+                    # 兜底：matcher 返回异常（无 idx 字段）时，按「全部未匹配」处理，
+                    # 让兜底补答与交卷后采集照常进行
+                    idx = [-1] * len(questions)
+                if not built.get("paperInLib", True) and questions:
+                    # 新卷子（答案库没有该卷）：先跨卷同题匹配，剩余的交卷后采集入库
+                    if cross:
+                        msg = (f"新卷子：答案库其它试卷命中 {len(cross)}/{len(questions)} 题（同类题目复用），"
+                               "其余题将尝试兜底作答")
+                    else:
+                        msg = (f"新卷子：答案库暂无该卷，{len(questions)} 题将尝试兜底 API 作答"
+                               "（未配置兜底时无法保证正确率）")
+                    self.backend.post_progress(task_id, name, exam_id, message=msg)
+                if built.get("lowConfidence"):
+                    log.warning("[%s] %s 低置信题 %d 道", self.name, name, len(built["lowConfidence"]))
+                # 新题型（填空/简答等无选项题）：如实告知用户，自动跳过不点选
+                noopts = built.get("noOptions") or []
+                if noopts:
+                    qs = "、".join(str(x.get("q")) for x in noopts[:12])
+                    more = " 等" if len(noopts) > 12 else ""
+                    self.backend.post_progress(
+                        task_id, name, exam_id,
+                        message=f"第 {qs}{more} 题没有选项（填空/主观题等新题型），本平台暂不支持自动作答，已跳过")
+
+                self._stage(task_id, f"{name}：兜底补答")
+                self._fill_by_fallback(batch, name, questions, idx)
+
+                # 未到目标遍数 → 本遍按进步曲线故意留错（第 N 遍才全对）
+                _degraded = _perfect > 1 and _attempt < _perfect
+                if _degraded:
                     idx, _wrong = degrade_for_rhythm(questions, idx, _attempt, _perfect)
-                    _msg = (f"满分节奏：本次是第 {_attempt} 遍（目标第 {_perfect} 遍全对），"
-                            f"按进步曲线故意留错 {_wrong} 题，下次作答才满分")
+                    _msg = (f"满分节奏：本次是第 {_attempt}/{_perfect} 遍，"
+                            f"按进步曲线故意留错 {_wrong} 题；交卷后立即重做本卷")
                     log.info("[%s] %s %s", self.name, name, _msg)
                     self.backend.post_progress(task_id, name, exam_id, message=_msg)
 
-            # 逐题回报：前端「题号进度」实时跟进，不再一卷结束才跳一格
-            self._stage(task_id, f"{name}：逐题作答", announce=False)
-            total_q = len(questions)
+                # 逐题回报：前端「题号进度」实时跟进，不再一卷结束才跳一格
+                self._stage(task_id, f"{name}：逐题作答", announce=False)
+                total_q = len(questions)
 
-            def _report(i):
-                self._touch()
-                if self._abort.is_set():
-                    raise AbortTask()  # 用户暂停：停止点击，半途的作答雨课堂会保留
-                self.backend.post_progress(task_id, name, exam_id,
-                                           seq=min(i + 1, total_q), total=total_q)
-                self._push_frame(driver, task_id)
+                def _report(i):
+                    self._touch()
+                    if self._abort.is_set():
+                        raise AbortTask()  # 用户暂停：停止点击，半途的作答雨课堂会保留
+                    self.backend.post_progress(task_id, name, exam_id,
+                                               seq=min(i + 1, total_q), total=total_q)
+                    self._push_frame(driver, task_id)
 
-            driver.click_answers(idx, on_progress=_report)
-            self._push_frame(driver, task_id, force=True)
-            # idx 每项是 int（单选）或 list[int]（多选）；拼出已选选项文本供校验。
-            # 未作答的题保留空串占位，保证下标与题号对齐（否则校验结果整体错位）
-            selected = []
-            for i in range(min(len(questions), len(idx))):
-                texts = _picked_texts(questions[i].get("options", []), idx[i])
-                selected.append("；".join(texts) if texts else "")
-            checked = driver.checked_count()
-            expected_checked = sum(_pick_count(x) for x in idx)
-            if checked < expected_checked:
-                log.warning("[%s] %s 已勾选 %d < 预期 %d，重试点击",
-                            self.name, name, checked, expected_checked)
-                driver.click_answers(idx)
+                driver.click_answers(idx, on_progress=_report)
                 self._push_frame(driver, task_id, force=True)
+                # idx 每项是 int（单选）或 list[int]（多选）；拼出已选选项文本供校验。
+                # 未作答的题保留空串占位，保证下标与题号对齐（否则校验结果整体错位）
+                selected = []
+                for i in range(min(len(questions), len(idx))):
+                    texts = _picked_texts(questions[i].get("options", []), idx[i])
+                    selected.append("；".join(texts) if texts else "")
                 checked = driver.checked_count()
-            if expected_checked > 0 and checked == 0:
-                # 一道都没勾上还硬交卷 = 烧掉作答次数换 0 分空白卷（无法挽回，调考1/调考10 就这么废掉的）。
-                # 不交卷：雨课堂保留半途作答，下次任务可从「继续答题」续作。
-                raise RuntimeError(
-                    "作答未落上页面（勾选 %d/预期 %d）：已保留作答不交卷，避免烧掉作答次数"
-                    % (checked, expected_checked))
+                expected_checked = sum(_pick_count(x) for x in idx)
+                if checked < expected_checked:
+                    log.warning("[%s] %s 已勾选 %d < 预期 %d，重试点击",
+                                self.name, name, checked, expected_checked)
+                    driver.click_answers(idx)
+                    self._push_frame(driver, task_id, force=True)
+                    checked = driver.checked_count()
+                if expected_checked > 0 and checked == 0:
+                    # 一道都没勾上还硬交卷 = 烧掉作答次数换 0 分空白卷（无法挽回，调考1/调考10 就这么废掉的）。
+                    # 不交卷：雨课堂保留半途作答，下次任务可从「继续答题」续作。
+                    raise RuntimeError(
+                        "作答未落上页面（勾选 %d/预期 %d）：已保留作答不交卷，避免烧掉作答次数"
+                        % (checked, expected_checked))
 
-            # 只有答案库里确有该卷时才做一致性校验（新卷子没有基准答案，校验无意义）
-            if self._lib_has_answers(batch, name):
-                report = self.matcher.verify(batch, name, selected)
-                if report.get("bad"):
-                    log.warning("[%s] %s 校验差异 %d 处", self.name, name, report["bad"])
+                # 只有答案库里确有该卷时才做一致性校验（新卷子没有基准答案，校验无意义）
+                if self._lib_has_answers(batch, name):
+                    report = self.matcher.verify(batch, name, selected)
+                    if report.get("bad"):
+                        log.warning("[%s] %s 校验差异 %d 处", self.name, name, report["bad"])
 
-            if self._abort.is_set():
-                raise AbortTask()  # 用户已暂停/中断：不交卷（半途作答雨课堂会保留，恢复后可继续）
-            self._stage(task_id, f"{name}：交卷中")
-            driver.submit(on_tick=tick)
-            self._push_frame(driver, task_id, force=True)
-            self._stage(task_id, f"{name}：读取成绩")
-            score = driver.read_score(on_tick=tick)
-            # 交卷后雨课堂常停在封面页（/cover/）而不是结果页：先打开结果页再采集，
-            # 否则会误报「未采到任何答案」
-            if "/result/" not in (driver.page.url or ""):
-                self._stage(task_id, f"{name}：打开结果页")
-                driver.open_result(exam_id, on_tick=tick)
-            self._push_frame(driver, task_id, force=True)
-            self.backend.post_progress(task_id, name, exam_id,
-                                       seq=len(questions), total=len(questions),
-                                       score=score, status="SUBMITTED",
-                                       message="已交卷 %s" % (score or ""))
+                if self._abort.is_set():
+                    raise AbortTask()  # 用户已暂停/中断：不交卷（半途作答雨课堂会保留，恢复后可继续）
+                self._stage(task_id, f"{name}：交卷中")
+                driver.submit(on_tick=tick)
+                self._push_frame(driver, task_id, force=True)
+                self._stage(task_id, f"{name}：读取成绩")
+                score = driver.read_score(on_tick=tick)
+                # 交卷后雨课堂常停在封面页（/cover/）而不是结果页：先打开结果页再采集，
+                # 否则会误报「未采到任何答案」
+                if "/result/" not in (driver.page.url or ""):
+                    self._stage(task_id, f"{name}：打开结果页")
+                    driver.open_result(exam_id, on_tick=tick)
+                self._push_frame(driver, task_id, force=True)
+                self.backend.post_progress(task_id, name, exam_id,
+                                           seq=len(questions), total=len(questions),
+                                           score=score, status="SUBMITTED",
+                                           message="已交卷 %s" % (score or ""))
+
+                if not _degraded:
+                    break  # 已到目标遍数（全对）→ 本卷完成，进下一套
+                # 本遍按节奏留错 → 立即重做本卷：交卷后停在封面/结果页，先回详情页才能点「再次答题」
+                _attempt += 1
+                self._stage(task_id, f"{name}：第 {_attempt - 1} 遍完成，立即重做本卷")
+                self.backend.post_progress(
+                    task_id, name, exam_id,
+                    message=f"满分节奏：第 {_attempt - 1} 遍完成，立即重做本卷（第 {_attempt}/{_perfect} 遍）")
+                if not (cid and eid):
+                    log.warning("[%s] %s 缺少课程/试卷 ID，无法重新进入本卷重做", self.name, name)
+                    break
+                driver.open_exam(cid, eid, on_tick=tick)
+                self._sleep_frames(driver, task_id, 2)
+                if not driver.has_entry_button():
+                    log.warning("[%s] %s 已无剩余作答机会，无法重做到满分，停在当前分数",
+                                self.name, name)
+                    self.backend.post_progress(task_id, name, exam_id,
+                                               message="本卷已无剩余作答机会，无法重做到满分，停在当前分数")
+                    break
 
             # 答案采集仅在 collect 模式（管理员取答案）进行；answer 模式交卷拿分后不采集
             if mode == "collect":
