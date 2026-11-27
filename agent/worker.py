@@ -1299,6 +1299,7 @@ class Dispatcher:
         self.backend = BackendClient()
         self.base = config.BACKEND_BASE
         self.parked = []
+        self._adopted_ids = set()  # 已收养过的任务 id：周期补收养时防重复入队
         self._lock = threading.Lock()
 
     def _adopt_orphans(self):
@@ -1311,15 +1312,24 @@ class Dispatcher:
             return
         for task in tasks:
             tid = task.get("taskId")
-            log.info("收养孤儿任务 #%s（上次进程遗留）", tid)
+            if tid is None or tid in self._adopted_ids:
+                continue
+            self._adopted_ids.add(tid)
+            log.info("收养孤儿任务 #%s（上次进程遗留 / 批次确认晚于 Agent 启动）", tid)
             self.parked.append(task)
 
     def run_forever(self):
         log.info("调度器启动：%d 个执行工人，轮询 backend %s", len(self.workers), config.BACKEND_BASE)
         self._adopt_orphans()
         last_warn = 0.0
+        last_adopt = time.time()
         while True:
             try:
+                # 周期补收养：批次确认可能发生在 Agent 重启之后（任务已 RUNNING 但无人认领），
+                # 只在启动时收养一次会漏掉这种任务，界面会永远停在「准备中」
+                if time.time() - last_adopt >= 30:
+                    self._adopt_orphans()
+                    last_adopt = time.time()
                 task = self.backend.next_task()
             except Exception as exc:
                 # 连不上后端时限频告警（默认每 30s 一条），并给出可操作提示：
