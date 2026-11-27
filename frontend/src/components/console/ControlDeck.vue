@@ -144,6 +144,13 @@ function isBelowFull(score?: string | null): boolean {
   return Number(m[1]) < Number(m[2])
 }
 
+function isFullScore(score?: string | null): boolean {
+  if (!score) return false
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(score)
+  if (!m) return false
+  return Number(m[1]) >= Number(m[2])
+}
+
 async function maybePromptRedo() {
   const t = store.task
   if (!t) return
@@ -158,7 +165,8 @@ async function maybePromptRedo() {
   const belowFull: string[] = []
   for (const it of t.items) {
     if (!it.paper) continue
-    if (it.status === 'COLLECTED') {
+    if (it.status === 'COLLECTED' && !isFullScore(it.score)) {
+      // 采集补缺时也可能带着「已满分」的分数：满分卷不再提示重做（否则 50/50 被误报成没做）
       collected.push(it.paper)
     } else if (it.status === 'SUBMITTED' && store.inLib(it.paper) && isBelowFull(it.score)) {
       belowFull.push(it.paper)
