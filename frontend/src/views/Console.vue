@@ -157,6 +157,20 @@ onMounted(async () => {
 
     <!-- 移动端底部动作条：永远告诉用户「下一步点什么」 -->
     <div v-if="showActionBar" class="action-bar">
+      <!-- 满分节奏：开始做题前随手定「第几次全对」——固定条顶部，永远可见 -->
+      <div v-if="step === 3 && store.task?.mode !== 'collect'" class="ab-rhythm">
+        <span class="ab-rhythm-label">满分节奏</span>
+        <button
+          v-for="n in 5"
+          :key="n"
+          class="ab-rhythm-opt"
+          :class="{ picked: store.perfectPass === n }"
+          type="button"
+          @click="store.perfectPass = n"
+        >
+          {{ n === 1 ? '一次满分' : `第${n}次` }}
+        </button>
+      </div>
       <template v-if="step === 3">
         <span class="ab-hint">
           {{ store.selectedPapers.length ? `已选 ${store.selectedPapers.length} 套` : '不勾选则处理全部作业' }}
@@ -235,6 +249,41 @@ onMounted(async () => {
   background: var(--surface);
   border-top: 1px solid var(--border);
   flex: none;
+  /* 满分节奏行在上、操作行在下：允许两行排布 */
+  flex-wrap: wrap;
+}
+/* 满分节奏选择行（固定操作条顶部，手机端永远可见） */
+.ab-rhythm {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--border);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.ab-rhythm-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--ink-500);
+}
+.ab-rhythm-opt {
+  flex: none;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--ink-600);
+  cursor: pointer;
+}
+.ab-rhythm-opt.picked {
+  border-color: var(--accent);
+  background: var(--accent-100);
+  color: var(--accent-700);
+  font-weight: 700;
 }
 .ab-hint {
   flex: 1;
@@ -366,8 +415,8 @@ onMounted(async () => {
        （内容整个裁没、文档高度=视口高、整页滚不动）——块级布局让面板按内容自然撑高 */
     display: block;
     overflow: visible;
-    /* 底部动作条 + tabbar 双层占位：最后一行内容不被遮挡 */
-    padding-bottom: calc(150px + env(safe-area-inset-bottom));
+    /* 底部动作条（含满分节奏行）+ tabbar 双层占位：最后一行内容不被遮挡 */
+    padding-bottom: calc(205px + env(safe-area-inset-bottom));
   }
   .is-hidden-mobile {
     display: none;

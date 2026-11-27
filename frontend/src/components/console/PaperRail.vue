@@ -187,25 +187,6 @@ async function startChecked(mode: TaskMode) {
       <span v-else class="batch muted">登录后确认答案库</span>
     </div>
 
-    <!-- 满分节奏：第几次作答才全对（手机端就在勾选卷子面板里，一眼可见；与操作面板共享同一状态） -->
-    <div
-      v-if="store.task?.mode !== 'collect'"
-      class="rhythm-bar"
-      title="没到目标次数的作答会按进步曲线故意留错，成绩逐步爬升更像真人；每次作答都消耗雨课堂的作答次数"
-    >
-      <span class="bq-label">满分节奏</span>
-      <button
-        v-for="n in 5"
-        :key="n"
-        class="bq-opt"
-        :class="{ picked: store.perfectPass === n }"
-        type="button"
-        @click="store.perfectPass = n"
-      >
-        {{ n === 1 ? '一次满分' : `第${n}次` }}
-      </button>
-    </div>
-
     <div v-if="total" class="pick-bar">
       <label class="pick-all" @click.prevent="toggleAll">
         <span class="box" :class="{ on: allChecked }">{{ allChecked ? '✓' : '' }}</span>
@@ -730,14 +711,6 @@ async function startChecked(mode: TaskMode) {
 .bq-label {
   font-size: 12px;
   color: var(--ink-500);
-}
-/* 满分节奏选择条（试卷清单顶部，勾选卷子时随手定策略） */
-.rhythm-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  padding: 0 16px 10px;
 }
 .bq-opt {
   padding: 4px 10px;
