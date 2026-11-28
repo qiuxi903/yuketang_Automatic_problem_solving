@@ -574,14 +574,28 @@ class Worker:
             if not redo:
                 lib_names = self._lib_names()
                 in_plan = {p["name"] for p in plan}
-                fresh = []
+                fresh = []          # 未交卷的新卷子：做了才有意义，自动带上（交卷后答案自动入库）
+                done_unlib = []     # 已交卷但不在答案库的旧卷子：绝不自动带（结果页未必开放，
+                                    # 采不到答案只会制造跳过噪音；第一次作业的旧卷子曾因此反复刷失败）
                 for e in entries:
                     ename = e.get("name") or ""
                     if not ename or any(ename in n or n in ename for n in in_plan):
                         continue
                     if self._in_lib(lib_names, ename):
                         continue  # 已在答案库（含其它批次）→ 不算新卷子
+                    if e.get("answered"):
+                        done_unlib.append(e)
+                        continue
                     fresh.append(e)
+                if done_unlib:
+                    names = "、".join(e["name"] for e in done_unlib[:8])
+                    more = " 等" if len(done_unlib) > 8 else ""
+                    log.info("[%s] %d 套已交卷的旧卷子不在答案库，不自动处理：%s",
+                             self.name, len(done_unlib), [e["name"] for e in done_unlib])
+                    self.backend.post_progress(
+                        task_id,
+                        message=f"另有 {len(done_unlib)} 套已交卷的旧卷子不在本题库（{names}{more}），"
+                                "不自动处理；需要采答案请在清单里手动勾选后点「取答案」")
                 if fresh:
                     names = "、".join(e["name"] for e in fresh[:8])
                     more = " 等" if len(fresh) > 8 else ""
@@ -602,11 +616,11 @@ class Worker:
                                 "entryStatus": e.get("status"),
                                 "newPaper": True,  # 批次外新卷：库内暂无答案，交卷后采答案入库
                             })
-                        log.info("[%s] 检测到 %d 套未入答案库的新卷子，一并处理：%s",
+                        log.info("[%s] 检测到 %d 套未交卷的新卷子，一并作答：%s",
                                  self.name, len(fresh), [e["name"] for e in fresh])
                         self.backend.post_progress(
                             task_id,
-                            message=f"检测到 {len(fresh)} 套新卷子（未入答案库），将一并尝试作答：{names}{more}")
+                            message=f"检测到 {len(fresh)} 套未交卷的新卷子（未入答案库），将一并尝试作答：{names}{more}")
             if mode == "collect":
                 answered_cnt = len([p for p in plan if p.get("answered")])
                 log.info("[%s] 批次 %s 采集模式：待处理 %d 套，其中已交卷 %d 套（仅读结果页取答案）",
