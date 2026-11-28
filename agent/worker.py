@@ -19,6 +19,10 @@ from collector_client import CollectorClient
 from matcher_client import MatcherClient
 from ykt_driver import AbortTask, Driver, LoginRequired
 
+
+class ResultPageUnavailable(RuntimeError):
+    """已交卷但结果页打不开（常见：老师未开放查看试卷/成绩未公布）——不算任务失败，等开放后再取。"""
+
 log = logging.getLogger("agent.worker")
 
 # 雨课堂账号占用注册表：账号名 → (任务号, 工人名)。
@@ -657,7 +661,8 @@ class Worker:
                            f"，未交卷 {stats['skipped']} 套（先做题后才能取），失败 {stats['failed']} 套")
             else:
                 summary = (f"全部试卷处理完成：作答 {stats['answered']} 套，取答案 {stats['fetched']} 套"
-                           f"，复用 {stats['reused']} 套，失败 {stats['failed']} 套")
+                           f"，复用 {stats['reused']} 套，跳过 {stats['skipped']} 套"
+                           f"（已交卷但结果页未开放等），失败 {stats['failed']} 套")
             self._safe_finish(task, "SUCCESS", summary=summary)
         except AbortTask:
             # 暂停/中断发生在任何阶段（扫码等待、试卷列表扫描、批次确认…）都在此收口：
@@ -793,7 +798,13 @@ class Worker:
 
         # 规则1：已交卷 → 只读结果页取答案，不进入答题、不交卷
         if answered:
-            return "fetched" if self._collect_from_result(driver, task, batch, paper) else "failed"
+            try:
+                return "fetched" if self._collect_from_result(driver, task, batch, paper) else "failed"
+            except ResultPageUnavailable:
+                self.backend.post_progress(
+                    task_id, name, exam_id, status="SKIPPED",
+                    message="已交卷但结果页暂未开放（老师未公布成绩），答案暂无法采集；开放后重新取答案即可")
+                return "skipped"
 
         # 未交卷 + 自动作答模式 → 正常 进入/作答/交卷
         return "answered" if self._answer_and_submit(driver, task, batch, paper, mode) else "failed"
@@ -873,7 +884,14 @@ class Worker:
                 self.backend.post_progress(
                     task_id, name, exam_id,
                     message="已交卷且无剩余作答次数，无法重做；改读结果页采集正确答案入库")
-                ok = self._collect_from_result(driver, task, batch, paper)
+                try:
+                    ok = self._collect_from_result(driver, task, batch, paper)
+                except ResultPageUnavailable:
+                    # 已交卷但结果页未开放（老师未公布成绩）：不算失败，等开放后再取
+                    self.backend.post_progress(
+                        task_id, name, exam_id, status="SKIPPED",
+                        message="已交卷但结果页暂未开放（老师未公布成绩），答案暂无法采集；开放后重新取答案即可")
+                    return "skipped"
                 return "fetched" if ok else "skipped"
 
             # 满分节奏：第 N 次作答才全对——前面的遍数按进步曲线故意留错（更像真人刷分）。
@@ -1082,7 +1100,7 @@ class Worker:
                                 self.name, name, (driver.page.url or "")[:120], shot)
                 except Exception:
                     pass
-                raise RuntimeError(
+                raise ResultPageUnavailable(
                     "结果页未就绪：%s（常见原因：老师未开放查看试卷/成绩未公布，稍后可重新取答案）" % name)
             self._push_frame(driver, task_id, force=True)
 
