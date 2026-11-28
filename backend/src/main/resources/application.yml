@@ -35,6 +35,8 @@ spring:
     default-property-inclusion: always
 
 ykt:
+  # 终态任务保留时长（小时）：超过后自动删除；之前 1 小时，用户回头就查不到历史任务
+  task-retention-hours: 72
   jwt:
     # JWT 密钥：请务必改成自己的随机串（泄露或更换时改这里并重启，所有登录态失效）
     secret: "${YKT_JWT_SECRET:change-me-to-a-long-random-string}"

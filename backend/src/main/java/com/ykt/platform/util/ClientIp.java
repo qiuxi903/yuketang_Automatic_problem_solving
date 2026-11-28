@@ -20,6 +20,11 @@ public final class ClientIp {
         if (real != null && !real.isBlank()) {
             return firstIp(real);
         }
+        // Cloudflare Tunnel 等穿透只会带 CF-Connecting-IP
+        String cf = request.getHeader("CF-Connecting-IP");
+        if (cf != null && !cf.isBlank()) {
+            return firstIp(cf);
+        }
         String xff = request.getHeader("X-Forwarded-For");
         if (xff != null && !xff.isBlank()) {
             return firstIp(xff);

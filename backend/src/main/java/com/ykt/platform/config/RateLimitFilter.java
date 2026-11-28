@@ -86,11 +86,13 @@ public class RateLimitFilter extends OncePerRequestFilter {
         chain.doFilter(request, response);
     }
 
-    /** 反代/内网穿透下优先取 X-Forwarded-For 的首个 IP。 */
+    /** 反代/内网穿透下优先取真实客户端 IP（X-Real-IP / CF-Connecting-IP / XFF 首段）。 */
     private static String clientIp(HttpServletRequest request) {
-        String xff = request.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
+        for (String h : new String[] {"X-Real-IP", "CF-Connecting-IP", "X-Forwarded-For"}) {
+            String v = request.getHeader(h);
+            if (v != null && !v.isBlank()) {
+                return v.split(",")[0].trim();
+            }
         }
         return request.getRemoteAddr();
     }

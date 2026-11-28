@@ -32,6 +32,7 @@ import com.ykt.platform.security.SecurityUtil;
 import com.ykt.platform.ws.TaskWebSocketHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.context.event.EventListener;
@@ -40,6 +41,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -251,7 +253,13 @@ public class TaskService {
      */
     @Transactional
     public OkResponse delete(Long userId, Long id) {
-        Task task = requireOwned(userId, id);
+        // 管理员可删除任何人的任务；普通用户仍只能删自己的
+        Task task = currentUserIsAdmin() ? require(id) : requireOwned(userId, id);
+        // 进行中的任务先中断再删：直接删会让 Agent 空跑、进度悬挂
+        if (task.getStatus() == TaskStatus.PENDING || task.getStatus() == TaskStatus.RUNNING
+                || task.getStatus() == TaskStatus.WAITING_BATCH) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "任务进行中，请先中断再删除");
+        }
         taskQueue.remove(id);
         frameCache.remove(id);
         taskItemRepository.deleteAll(taskItemRepository.findByTaskIdOrderByIdAsc(id));
@@ -260,11 +268,15 @@ public class TaskService {
         return OkResponse.of();
     }
 
-    /** 终态任务空闲回收：结束 1 小时后自动删除（含明细），保证用户下次打开都从「扫码登录」开始。 */
+    /** 终态任务保留时长（小时）：超过后自动删除；ykt.task-retention-hours 可调，默认 72 小时（3 天）。 */
+    @Value("${ykt.task-retention-hours:72}")
+    private int retentionHours;
+
+    /** 终态任务空闲回收：结束 N 小时后自动删除（含明细）；之前 1 小时太短，用户回头就查不到历史任务。 */
     @Scheduled(fixedDelay = 600_000, initialDelay = 120_000)
     @Transactional
     public void purgeStaleFinishedTasks() {
-        Instant cutoff = Instant.now().minusSeconds(3600);
+        Instant cutoff = Instant.now().minusSeconds(java.time.Duration.ofHours(Math.max(1, retentionHours)).toSeconds());
         List<Task> stale = taskRepository.findByStatusInAndFinishedAtBefore(
                 List.of(TaskStatus.SUCCESS, TaskStatus.FAILED, TaskStatus.CANCELLED), cutoff);
         // 历史数据兜底：字段上线前的终态任务没有 finishedAt，按创建时间判定
