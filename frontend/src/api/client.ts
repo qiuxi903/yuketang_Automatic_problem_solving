@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/store/auth'
+import { detectPublicIp, publicIp } from '@/utils/publicIp'
 
 // 由 main.ts 注入跳转逻辑，避免 client -> router -> store -> api 的循环依赖
 let redirectToLogin: (() => void) | null = null
@@ -15,10 +16,18 @@ const client = axios.create({
   timeout: 15000,
 })
 
+// 设备侧公网 IP 探测：页面打开即异步探测（不阻塞首屏），拿到后随 API 请求带上，
+// 内网穿透场景下后端用它展示用户真实来源（可伪造，仅展示用）
+void detectPublicIp()
+
 client.interceptors.request.use((config) => {
   const auth = useAuthStore()
   if (auth.token) {
     config.headers.Authorization = `Bearer ${auth.token}`
+  }
+  const ip = publicIp()
+  if (ip) {
+    config.headers['X-Client-Public-IP'] = ip
   }
   return config
 })
